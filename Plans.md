@@ -34,10 +34,10 @@
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 3.1 | [lane:gate] [tdd:required] Tier-1 classifier（PL ルール）: settled prospect turn に spec.md §3 の label を付与。`smalltalk|none` はカード抑制。`separation:'mixed'` 時は閾値引き上げ | PL fixture corpus（各 label + 語形変化 + 抑制ケース）green、判定 <200ms | 2.1 | cc:完了 [bb133ad] |
-| 3.2 | [lane:gate] [tdd:required] Playbook YAML 化: `{id,trigger,headline,line,detail}` schema、trigram マッチ維持、`playbook.tsv` → `playbook/*.yaml` 移行 | 既存 playbook テスト + schema validation テスト green、tsv 削除 | 3.1 | cc:TODO |
+| 3.2 | [lane:gate] [tdd:required] Playbook YAML 化: `{id,trigger,headline,line,detail}` schema、trigram マッチ維持、`playbook.tsv` → `playbook/*.yaml` 移行 | 既存 playbook テスト + schema validation テスト green、tsv 削除 | 3.1 | cc:WIP |
 | 3.3 | [lane:gate] [tdd:required] Suggestion payload + latency instrumentation: per-stage timestamp（transport tag 付き）を suggestion に添付、bench に集計を追加 | bench 出力に transport 別 p50/p95 が出る | 2.2 | cc:WIP |
-| 3.4 | [lane:gate] [tdd:required] No-sentiment guard: label set を閉集合で固定、Tier-2/生成 prompt に感情推論禁止を明記、これを assert するテスト | 禁止語 assert テスト green、spec.md §1 non-goals 準拠 | 3.1 | cc:TODO |
-| 3.5 | [lane:fast] [tdd:required] Echo/headset 警告: mic×loopback 相関が閾値超過で UI 警告 | 合成エコー音源で警告が発火するテスト green | 2.3 | cc:WIP |
+| 3.4 | [lane:gate] [tdd:required] No-sentiment guard: label set を閉集合で固定、Tier-2/生成 prompt に感情推論禁止を明記、これを assert するテスト | 禁止語 assert テスト green、spec.md §1 non-goals 準拠 | 3.1 | cc:完了 [0578c78] |
+| 3.5 | [lane:fast] [tdd:required] Echo/headset 警告: mic×loopback 相関が閾値超過で UI 警告 | 合成エコー音源で警告が発火するテスト green | 2.3 | cc:完了 [3c95e30] |
 
 ## Phase 4: Operator chrome（Transport B の UI 完成）
 
