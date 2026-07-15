@@ -31,7 +31,7 @@ All transports implement one interface; `CallSession` (the pipeline) knows
 nothing about transports.
 
 - `AudioFrame = { speaker: 'prospect'|'rep', pcm: Float32Array /*16kHz mono*/,
-  t: number /*ms, monotonic, source-provided*/ }`
+  t: number /*ms since capture start, monotonic per speaker, source-provided*/ }`
 - `AudioSource = { transport, speakers, separation: 'clean'|'mixed',
   start(), stop(), on('audio'|'end'|'health') }`
 - **Deviation from proposal:** internal frame format stays **Float32 @16kHz**

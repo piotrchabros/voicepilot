@@ -55,7 +55,7 @@ export function describeAudioSourceContract(
       }
     })
 
-    it('(b) t is monotonic non-decreasing across frames', async () => {
+    it('(b) t is monotonic non-decreasing per speaker (spec.md §2: independently sample-count-derived per speaker, not a shared timeline)', async () => {
       const { source, drive } = await factory()
       const frames: AudioFrame[] = []
       source.on('audio', (f) => frames.push(f))
@@ -63,8 +63,13 @@ export function describeAudioSourceContract(
       await drive()
       await source.stop()
 
-      for (let i = 1; i < frames.length; i++) {
-        expect(frames[i]!.t).toBeGreaterThanOrEqual(frames[i - 1]!.t)
+      const lastTBySpeaker = new Map<SpeakerRole, number>()
+      for (const f of frames) {
+        const last = lastTBySpeaker.get(f.speaker)
+        if (last !== undefined) {
+          expect(f.t).toBeGreaterThanOrEqual(last)
+        }
+        lastTBySpeaker.set(f.speaker, f.t)
       }
     })
 

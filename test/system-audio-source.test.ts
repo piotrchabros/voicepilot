@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import type { SpeakerRole } from '@shared/audio-source'
 import { LEG_MIC, LEG_SYSTEM, type Leg } from '@shared/types'
 import type { SidecarDeps } from '../src/main/sidecar'
 import {
+  legForSpeaker,
+  speakerForLeg,
   SystemAudioSource,
   type SidecarFactory,
   type SidecarLike
@@ -167,5 +170,62 @@ describe('SystemAudioSource (adapter-specific behavior)', () => {
     await source.stop()
 
     expect(stopCalled).toBe(true)
+  })
+
+  it('does not report health for an onLog error arriving after stop() (e.g. a trailing sc-stopped shutdown race)', async () => {
+    const { factory: sidecarFactory, getDeps } = makeFakeSidecarFactory()
+    const source = new SystemAudioSource({ binary: '/fake/bin', sidecarFactory })
+    await source.start()
+    const deps = getDeps()
+
+    const statuses: Array<{ ok: boolean; detail: string }> = []
+    source.on('health', (s) => statuses.push(s))
+
+    await source.stop()
+    deps.onLog('error', 'ScreenCaptureKit stream stopped', 'sc-stopped')
+
+    expect(statuses).toHaveLength(0)
+  })
+
+  it('drops frames delivered directly via deps.onFrame after stop() (not just via a well-behaved drive())', async () => {
+    const { factory: sidecarFactory, getDeps } = makeFakeSidecarFactory()
+    const source = new SystemAudioSource({ binary: '/fake/bin', sidecarFactory })
+    await source.start()
+    const deps = getDeps()
+
+    const frames: Array<{ speaker: string }> = []
+    source.on('audio', (f) => frames.push({ speaker: f.speaker }))
+
+    await source.stop()
+    deps.onFrame(LEG_MIC, makeSamples(0.5))
+    deps.onFrame(LEG_SYSTEM, makeSamples(0.5))
+
+    expect(frames).toHaveLength(0)
+  })
+
+  describe('speakerForLeg / legForSpeaker (pure round-trip mapping)', () => {
+    it('speakerForLeg: mic (0x00) -> rep, system (0x01) -> prospect', () => {
+      expect(speakerForLeg(LEG_MIC)).toBe('rep')
+      expect(speakerForLeg(LEG_SYSTEM)).toBe('prospect')
+    })
+
+    it('legForSpeaker: rep -> mic (0x00), prospect -> system (0x01)', () => {
+      expect(legForSpeaker('rep')).toBe(LEG_MIC)
+      expect(legForSpeaker('prospect')).toBe(LEG_SYSTEM)
+    })
+
+    it('round-trips: legForSpeaker(speakerForLeg(leg)) === leg for every leg', () => {
+      const legs: Leg[] = [LEG_MIC, LEG_SYSTEM]
+      for (const leg of legs) {
+        expect(legForSpeaker(speakerForLeg(leg))).toBe(leg)
+      }
+    })
+
+    it('round-trips: speakerForLeg(legForSpeaker(speaker)) === speaker for every speaker', () => {
+      const speakers: SpeakerRole[] = ['rep', 'prospect']
+      for (const speaker of speakers) {
+        expect(speakerForLeg(legForSpeaker(speaker))).toBe(speaker)
+      }
+    })
   })
 })

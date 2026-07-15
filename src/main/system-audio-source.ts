@@ -1,5 +1,5 @@
 import type { AudioFrame, AudioSource, Separation, SpeakerRole } from '@shared/audio-source'
-import { FRAME_MS, LEG_MIC, type Leg } from '@shared/types'
+import { FRAME_MS, LEG_MIC, LEG_SYSTEM, type Leg } from '@shared/types'
 import { Sidecar, type SidecarDeps } from './sidecar'
 
 // Wraps the existing capture sidecar (`./sidecar.ts`) behind the `AudioSource`
@@ -22,6 +22,21 @@ export interface SidecarLike {
 /** Builds the sidecar (or a fake standing in for it) from the deps this
  *  adapter wires up. Defaults to the real `Sidecar`; tests override this. */
 export type SidecarFactory = (deps: SidecarDeps) => SidecarLike
+
+/** Pure leg -> speaker mapping: mic (0x00) is the rep, system loopback (0x01)
+ *  is everyone-but-the-rep (spec.md §2). Extracted so the mapping — and its
+ *  round-trip inverse below — can be unit-tested independent of the sidecar
+ *  wiring, and reused wherever this seam is translated back to the wire
+ *  protocol (e.g. `pipeline-host.ts`). */
+export function speakerForLeg(leg: Leg): SpeakerRole {
+  return leg === LEG_MIC ? 'rep' : 'prospect'
+}
+
+/** Inverse of `speakerForLeg`: speaker -> leg, for code that needs to
+ *  translate an `AudioFrame` back into the sidecar/pipeline wire protocol. */
+export function legForSpeaker(speaker: SpeakerRole): Leg {
+  return speaker === 'rep' ? LEG_MIC : LEG_SYSTEM
+}
 
 export interface SystemAudioSourceOptions {
   /** Path to the capture sidecar binary (see `sidecarBinary()` in `./config`). */
@@ -89,7 +104,7 @@ export class SystemAudioSource implements AudioSource {
 
   private handleFrame(leg: Leg, samples: ArrayBuffer): void {
     if (this.stopped) return
-    const speaker: SpeakerRole = leg === LEG_MIC ? 'rep' : 'prospect'
+    const speaker: SpeakerRole = speakerForLeg(leg)
     const t = speaker === 'rep' ? this.repFrameCount * FRAME_MS : this.prospectFrameCount * FRAME_MS
     if (speaker === 'rep') this.repFrameCount++
     else this.prospectFrameCount++
@@ -99,6 +114,10 @@ export class SystemAudioSource implements AudioSource {
   }
 
   private handleLog(level: string, msg: string, code?: string): void {
+    // Once we've been stopped, a trailing sc-stopped/exit-race log from the
+    // sidecar is expected shutdown noise, not a health regression — reporting
+    // it as health(ok:false) would be a false alarm after an intentional stop.
+    if (this.stopped) return
     if (level !== 'error') return
     const detail = code ? `[${code}] ${msg}` : msg
     for (const h of this.healthHandlers) h({ ok: false, detail })

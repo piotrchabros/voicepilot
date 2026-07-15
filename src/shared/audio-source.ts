@@ -18,7 +18,10 @@ export interface AudioFrame {
   readonly speaker: SpeakerRole
   /** 16kHz mono PCM samples. */
   readonly pcm: Float32Array
-  /** ms since capture start; monotonic, source-provided (not wall-clock). */
+  /** ms since capture start; monotonic **per speaker**, source-provided (not
+   *  wall-clock). Two speakers' timelines are independently sample-count
+   *  derived — comparing `t` across speakers is not meaningful; drift between
+   *  them is a real, observable signal, not a bug to paper over. */
   readonly t: number
 }
 

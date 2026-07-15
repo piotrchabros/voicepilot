@@ -2,8 +2,7 @@ import { type UtilityProcess, utilityProcess } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AudioFrame } from '@shared/audio-source'
-import type { FromPipeline, Hint, InitMsg, Leg, LogMsg } from '@shared/types'
-import { LEG_MIC, LEG_SYSTEM } from '@shared/types'
+import type { FromPipeline, Hint, InitMsg, LogMsg } from '@shared/types'
 import {
   checkModels,
   paths,
@@ -15,7 +14,7 @@ import {
 } from './config'
 import { LlamaSupervisor } from './llama-supervisor'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
-import { SystemAudioSource } from './system-audio-source'
+import { legForSpeaker, SystemAudioSource } from './system-audio-source'
 
 // Owns the three child processes that make up the runtime:
 //   1. the utilityProcess pipeline (VAD/STT/HintEngine) — off the main thread
@@ -121,7 +120,7 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
   const audioSource = new SystemAudioSource({ binary: sidecarBinary() })
   audioSource.on('audio', (frame: AudioFrame) => {
     if (debug && ++frameCount % 150 === 0) log('info', `main: ${frameCount} frames from sidecar`)
-    const leg: Leg = frame.speaker === 'rep' ? LEG_MIC : LEG_SYSTEM
+    const leg = legForSpeaker(frame.speaker)
     child.postMessage({ type: 'frame', leg, samples: frame.pcm.buffer })
   })
   audioSource.on('health', (status) => {
