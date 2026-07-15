@@ -39,10 +39,12 @@ export interface ClassifyOpts {
 }
 
 /** Confidence threshold under normal ('clean') separation. Tuned above the
- * incidental trigram overlap floor (~0.2) that unrelated small-talk-adjacent
- * sentences can hit by chance, and below the weakest true-positive fixture
- * (~0.48) — see test/classifier.test.ts. */
-const CLEAN_THRESHOLD = 0.35
+ * incidental trigram overlap floor (~0.2 for unrelated small-talk-adjacent
+ * sentences, ~0.38 for negated sentences that still share trigrams with an
+ * unrelated label after the negation guard zeroes out their own label — see
+ * "nie jest wcale za drogie" in test/classifier.test.ts) and below the
+ * weakest true-positive fixture (~0.48). */
+const CLEAN_THRESHOLD = 0.42
 /**
  * Under 'mixed' separation (system loopback — everyone-but-the-rep, no
  * diarization) the input is noisier, so a match must be more decisive before
@@ -52,9 +54,12 @@ const CLEAN_THRESHOLD = 0.35
 const MIXED_THRESHOLD = 0.55
 
 /**
- * Ordered rule table. Order matters only as a tie-breaker convention (first
- * label to reach the winning score wins); scores are still compared
- * numerically below, so a later rule with a stronger match still wins.
+ * Ordered rule table. Rule/phrase order is NOT the tie-breaker (see
+ * `pickBetter` below): when two phrases score equally, the longer phrase
+ * wins because it is the more specific (less accidental) match. This matters
+ * because plain substring hits all score exactly 1 — array order alone would
+ * otherwise let a short, generic phrase from an earlier rule beat a longer,
+ * more specific phrase from a later rule.
  */
 interface Rule {
   readonly label: Exclude<TriggerLabel, 'none'>
@@ -76,7 +81,11 @@ const RULES: readonly Rule[] = [
       'dziekuje za rozmowe',
       'do uslyszenia',
       'do widzenia',
-      'na razie'
+      // NOT bare "na razie": that generic farewell is a substring of
+      // brush-offs like "na razie nie" (timing_objection) and would win a
+      // same-score tie by array order. Only match an unambiguous, fuller
+      // farewell phrase here.
+      'to na razie, dzieki'
     ]
   },
   {
@@ -112,7 +121,10 @@ const RULES: readonly Rule[] = [
       'na razie nie',
       'pozniej porozmawiamy',
       'w przyszlym kwartale',
-      'w przyszlym roku'
+      'w przyszlym roku',
+      // Stalling variant of "bierzemy to" (buying_signal): "we'll take it
+      // under consideration" is a delay, not a commitment.
+      'bierzemy to pod uwage'
     ]
   },
   {
@@ -170,7 +182,10 @@ const RULES: readonly Rule[] = [
       'gotowi podpisac',
       'wysylajcie umowe',
       'wyslijcie umowe',
-      'bierzemy to',
+      // More specific than bare "bierzemy to" (which also matches the
+      // stalling phrase "bierzemy to pod uwagę" that belongs to
+      // timing_objection instead).
+      'bierzemy to od razu',
       'chcemy to wdrozyc',
       'super, dzialamy',
       'jak wygladaja kolejne kroki'
@@ -238,6 +253,61 @@ function cosine(a: Map<string, number>, an: number, b: Map<string, number>, bn: 
   return dot / (an * bn)
 }
 
+interface CompiledPhrase {
+  readonly label: Exclude<TriggerLabel, 'none'>
+  readonly normalizedPhrase: string
+  readonly length: number
+  readonly grams: Map<string, number>
+  readonly gramsNorm: number
+}
+
+/**
+ * Precomputed once at module load (not per `classifyTurn` call): each rule
+ * phrase's normalized form and trigram bag. `classifyTurn` runs on every
+ * settled prospect turn, so recomputing these constants per call would be
+ * pure waste — the rule table never changes at runtime.
+ */
+const COMPILED_PHRASES: readonly CompiledPhrase[] = RULES.flatMap((rule) =>
+  rule.phrases.map((phrase) => {
+    const normalizedPhrase = normalize(phrase)
+    const grams = trigrams(phrase)
+    return {
+      label: rule.label,
+      normalizedPhrase,
+      length: normalizedPhrase.length,
+      grams,
+      gramsNorm: normOf(grams)
+    }
+  })
+)
+
+/**
+ * Lightweight negation guard: a phrase match is discarded if one of the
+ * NEGATION_WORDS appears within NEGATION_LOOKBACK tokens immediately before
+ * the match (e.g. "nie jest wcale za drogie" must not fire price_objection).
+ * Only applied to exact-substring matches, where the match start index is
+ * known; phrases that legitimately start with a negation word themselves
+ * (e.g. "nie teraz", "nie stac nas") are unaffected because the check only
+ * looks at tokens strictly BEFORE the match, never inside it.
+ */
+const NEGATION_WORDS = new Set(['nie', 'wcale'])
+const NEGATION_LOOKBACK = 3
+
+function isNegated(normalizedText: string, matchIndex: number): boolean {
+  const before = normalizedText.slice(0, matchIndex).split(/\s+/).filter(Boolean)
+  const window = before.slice(-NEGATION_LOOKBACK)
+  return window.some((token) => NEGATION_WORDS.has(token))
+}
+
+/** Tie-break rule: strictly higher score wins; on an exact tie, the longer
+ * (more specific) phrase wins. Longer-phrase-wins only matters between two
+ * substring hits (both score exactly 1) or two trigram-fallback hits that
+ * happen to tie — either way "more specific match" is the correct tiebreak. */
+function isBetter(score: number, length: number, bestScore: number, bestLength: number): boolean {
+  if (score > bestScore) return true
+  return score === bestScore && score > 0 && length > bestLength
+}
+
 /**
  * classifyTurn: pure, synchronous, dependency-free. Never infers emotion,
  * sentiment, stress, or personality — only a closed-set topical label
@@ -252,26 +322,40 @@ export function classifyTurn(text: string, opts?: ClassifyOpts): Classification 
   const qn = normOf(q)
   if (qn === 0) return { label: 'none', confidence: 0 }
 
+  // Pass 1: exact-substring matches, so we know which labels the speaker
+  // explicitly negated ("nie jest wcale za drogie"). A negated exact match
+  // must also suppress trigram-fallback near-duplicates under the SAME
+  // label in pass 2 (e.g. "za drogo" trigram-overlapping "za drogie" right
+  // after it was negated) — otherwise the negation guard is defeated by a
+  // slightly different wording of the very same phrase.
+  const negatedLabels = new Set<Exclude<TriggerLabel, 'none'>>()
+  for (const compiled of COMPILED_PHRASES) {
+    const matchIndex = normalizedText.indexOf(compiled.normalizedPhrase)
+    if (matchIndex !== -1 && isNegated(normalizedText, matchIndex)) {
+      negatedLabels.add(compiled.label)
+    }
+  }
+
   let bestLabel: Exclude<TriggerLabel, 'none'> | null = null
   let bestScore = 0
+  let bestLength = 0
 
-  for (const rule of RULES) {
-    for (const phrase of rule.phrases) {
-      const normalizedPhrase = normalize(phrase)
+  for (const compiled of COMPILED_PHRASES) {
+    let score: number
+    const matchIndex = normalizedText.indexOf(compiled.normalizedPhrase)
+    if (matchIndex !== -1) {
       // Exact substring match on folded text is a strong, cheap signal
-      // (handles verbatim/near-verbatim PL objections).
-      let score = 0
-      if (normalizedText.includes(normalizedPhrase)) {
-        score = 1
-      } else {
-        const p = trigrams(phrase)
-        const pn = normOf(p)
-        score = cosine(q, qn, p, pn)
-      }
-      if (score > bestScore) {
-        bestScore = score
-        bestLabel = rule.label
-      }
+      // (handles verbatim/near-verbatim PL objections) — unless negated.
+      score = isNegated(normalizedText, matchIndex) ? 0 : 1
+    } else if (negatedLabels.has(compiled.label)) {
+      score = 0
+    } else {
+      score = cosine(q, qn, compiled.grams, compiled.gramsNorm)
+    }
+    if (isBetter(score, compiled.length, bestScore, bestLength)) {
+      bestScore = score
+      bestLabel = compiled.label
+      bestLength = compiled.length
     }
   }
 

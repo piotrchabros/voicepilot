@@ -111,6 +111,30 @@ describe('classifyTurn (spec.md §3 Tier-1 PL rules)', () => {
     it('thanks stays smalltalk', () => {
       expect(classifyTurn('dziękuję bardzo za rozmowę').label).toBe('smalltalk')
     })
+    // Regression: bare "na razie" used to be a smalltalk phrase and, on an
+    // exact-substring tie (score 1.0), array order let it beat the longer,
+    // more specific "na razie nie" timing_objection phrase. "na razie" was
+    // removed from the smalltalk list; the longest-phrase tie-break below
+    // is a second, independent layer of defense against the same class of
+    // bug recurring with future phrases.
+    it('a brush-off starting with the smalltalk farewell "na razie" is timing_objection, not smalltalk', () => {
+      expect(classifyTurn('na razie nie, musimy to jeszcze przemyśleć').label).toBe(
+        'timing_objection'
+      )
+    })
+  })
+
+  describe('negation guard (must not misfire on an explicitly negated objection)', () => {
+    it('a negated price statement does not fire price_objection', () => {
+      const c = classifyTurn('nie jest wcale za drogie')
+      expect(c.label).not.toBe('price_objection')
+    })
+  })
+
+  describe('stalling vs. commitment ("bierzemy to")', () => {
+    it('"bierzemy to pod uwagę" (we will take it under consideration) is a stall, not a buying signal', () => {
+      expect(classifyTurn('okej, bierzemy to pod uwagę').label).toBe('timing_objection')
+    })
   })
 
   describe('none (no signal)', () => {

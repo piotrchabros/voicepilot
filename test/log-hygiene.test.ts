@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Hint } from '@shared/types'
-import { formatHintLog, formatTurnEndLog } from '../src/pipeline/index'
+import { formatClassificationLog, formatHintLog, formatTurnEndLog } from '../src/pipeline/index'
 
 // spec.md §4.4 (Compliance & security, item 4 "Log hygiene"): no transcript/hint
 // text in logs outside explicit debug mode; production default logs contain no
@@ -36,6 +36,27 @@ describe('log hygiene (spec.md §4.4)', () => {
       const line = formatHintLog(hint, true)
       expect(line).not.toBeNull()
       expect(line).toContain(SECRET_HINT_TEXT)
+    })
+  })
+
+  // spec.md §3 Tier-1 classification is a gate + telemetry label: even in
+  // debug mode, only the label + confidence may appear — never the
+  // underlying transcript text (that's a separate, already-gated call via
+  // formatTurnEndLog above).
+  describe('formatClassificationLog', () => {
+    it('never logs anything when debug is off', () => {
+      const line = formatClassificationLog('price_objection', 0.91, false)
+      expect(line).toBeNull()
+    })
+
+    it('logs only the label and confidence when debug is explicitly on', () => {
+      const line = formatClassificationLog('price_objection', 0.91, true)
+      expect(line).not.toBeNull()
+      expect(line).toContain('price_objection')
+      expect(line).toContain('0.91')
+      // No transcript text of any kind should ever appear in this line.
+      expect(line).not.toContain(SECRET_TRANSCRIPT)
+      expect(line).not.toContain(SECRET_HINT_TEXT)
     })
   })
 })
