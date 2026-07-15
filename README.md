@@ -73,6 +73,17 @@ mamy już dostawcę	Co byś zmienił w obecnym rozwiązaniu?
 mvn clean compile javafx:run
 ```
 
+## Lint
+
+Formatting/linting is [Biome](https://biomejs.dev), configured in `biome.json`
+(scoped to `src/`, `test/`, `scripts/`; `out/`, `node_modules/`, `native/`, and
+`openwiki/` are excluded):
+
+```bash
+npm run lint          # biome check . — formatter + linter, exit 0 required
+npm run format:check  # biome format . — formatting only, no writes
+```
+
 ## Measure before you optimise
 
 Log a timestamp at each stage boundary and print the p50/p95. Everything about

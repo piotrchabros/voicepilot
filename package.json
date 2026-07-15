@@ -16,6 +16,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "biome check .",
+    "format": "biome format . --write",
+    "format:check": "biome format .",
     "sidecar": "swift build --package-path native/capture -c release"
   },
   "dependencies": {
@@ -24,6 +27,7 @@
     "ws": "^8.21.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.4",
     "@types/node": "^22.7.4",
     "@types/ws": "^8.18.1",
     "electron": "^33.0.0",
