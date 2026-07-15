@@ -1,12 +1,21 @@
-import type { ConsentRequiredMsg, CopilotBridge, HealthMsg, Hint } from '@shared/types'
+import type {
+  ConsentRequiredMsg,
+  CopilotBridge,
+  HealthMsg,
+  Hint,
+  SuggestionTransport
+} from '@shared/types'
 import { bannerStateFor } from './health-banner'
 import { consentPromptViewFor, type ConsentViewState, recIndicatorViewFor } from './consent-view'
+import { hintDisplayFor } from './hint-view'
+import { modeLabelFor } from './mode-chip'
 
 // The renderer paints hints, shows a health banner, and manages the
 // Transport-B consent gate UI (spec.md §4 item 2 / §5, Plans.md Task 4.1): a
 // consent prompt until the operator affirms, then a persistent REC
 // indicator. Coalescing at ~30Hz for hints happens naturally because we only
-// touch the DOM on an event.
+// touch the DOM on an event. Task 4.2 adds the always-on mode chip and the
+// two-line suggestion-card hierarchy (spec.md §5 "Transport chrome").
 declare global {
   interface Window {
     copilot: CopilotBridge
@@ -17,23 +26,37 @@ declare global {
 // without an explicit ok:true recovery event (spec.md Task 2.4).
 const HEALTH_BANNER_TIMEOUT_MS = 10_000
 
+// v1 only ever wires SystemAudioSource (spec.md §2); there is no live
+// transport-selector UI yet, just this always-visible label. modeLabelFor
+// already covers 'file'/'twilio' so swapping this constant is the only change
+// needed once bench replay or PSTN (Transport A) drive the chip for real.
+const CURRENT_TRANSPORT: SuggestionTransport = 'system'
+
 const pill = document.getElementById('pill') as HTMLDivElement
-const hintEl = document.getElementById('hint') as HTMLSpanElement
+const hintHeadlineEl = document.getElementById('hint-headline') as HTMLSpanElement
+const hintLineEl = document.getElementById('hint-line') as HTMLSpanElement
 const healthPill = document.getElementById('health-pill') as HTMLDivElement
 const healthEl = document.getElementById('health') as HTMLSpanElement
 const consentPrompt = document.getElementById('consent-prompt') as HTMLDivElement
 const consentAnnouncementEl = document.getElementById('consent-announcement') as HTMLSpanElement
 const consentAffirmBtn = document.getElementById('consent-affirm-btn') as HTMLButtonElement
 const recIndicator = document.getElementById('rec-indicator') as HTMLDivElement
+const modeLabelEl = document.getElementById('mode-label') as HTMLSpanElement
 
 let healthTimer: ReturnType<typeof setTimeout> | null = null
 
+// The headline/line split decision is pure (hintDisplayFor, unit-tested
+// without jsdom); only the DOM writes below live here.
 function render(hint: Hint): void {
   const text = hint.text.trim()
-  hintEl.textContent = text
+  const display = hintDisplayFor(hint)
+  const twoLine = display.headline !== undefined
+  hintHeadlineEl.textContent = twoLine ? (display.headline as string) : (display.single ?? '')
+  hintLineEl.textContent = twoLine ? (display.line ?? '') : ''
+  pill.classList.toggle('two-line', twoLine)
   // Dim the guess, brighten the earned answer — so the eye learns to trust the
   // bright one without reading either.
-  hintEl.classList.toggle('generated', hint.source === 'GENERATED')
+  hintHeadlineEl.classList.toggle('generated', hint.source === 'GENERATED')
   pill.classList.toggle('visible', text.length > 0 && text !== '-')
 }
 
@@ -85,6 +108,11 @@ consentAffirmBtn.addEventListener('click', () => {
   consentPrompt.classList.remove('visible')
   renderRecIndicator()
 })
+
+// Mode chip: always visible, independent of consent state (spec.md §5) —
+// unlike REC, it doesn't wait on affirmation because it isn't recording
+// anything, it's just naming which capture path is live.
+modeLabelEl.textContent = modeLabelFor(CURRENT_TRANSPORT)
 
 window.copilot.onHint(render)
 window.copilot.onHealth(renderHealth)

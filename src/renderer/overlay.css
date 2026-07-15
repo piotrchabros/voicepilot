@@ -24,8 +24,10 @@ body {
   bottom: 0;
   transform: translateX(-50%);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   padding: 18px 28px;
   border-radius: 14px;
   background: rgba(12, 12, 14, 0.86);
@@ -38,18 +40,35 @@ body {
   opacity: 1;
 }
 
-#hint {
+/* Headline: the bold, bigger line. Holds the single GENERATED line too, so
+   its base weight/size doubles as that case (spec.md §5 "headline ≤6 words"). */
+#hint-headline {
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 600;
   font-size: 30px;
   line-height: 1;
   white-space: nowrap;
-  /* Retrieved = dimmed guess; generated = full white. Set inline by the script. */
+  /* Retrieved = dimmed guess; generated = full white. Toggled by the script. */
   color: rgba(255, 255, 255, 0.55);
 }
 
-#hint.generated {
+#hint-headline.generated {
   color: rgb(255, 255, 255);
+}
+
+/* Detail line: thin/small, only occupies space when the pill is in two-line
+   (RETRIEVED headline + line) mode — empty text otherwise so it collapses. */
+#hint-line {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+#pill:not(.two-line) #hint-line {
+  display: none;
 }
 
 /* Health banner: small red pill, top-centre — deliberately distinct from the
@@ -136,12 +155,43 @@ body {
   cursor: pointer;
 }
 
-/* Persistent recording indicator (spec.md §4 item 2) — visible for the whole
-   duration capture may run, i.e. from affirmation onward. */
-#rec-indicator {
+/* Top-left transport chrome (spec.md §5 "mode selector"): stacks the
+   always-visible mode chip above the REC indicator, which only appears once
+   the operator affirms consent (Plans.md Task 4.1). Grouped in one
+   positioned wrapper so the two never drift out of alignment. */
+#top-left-chrome {
   position: absolute;
   left: 16px;
   top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* Mode chip: quiet, always-on label naming the live capture transport
+   (spec.md §5). Deliberately understated — never louder than the REC
+   indicator it sits above. */
+#mode-chip {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(12, 12, 14, 0.6);
+}
+
+#mode-label {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Persistent recording indicator (spec.md §4 item 2) — visible for the whole
+   duration capture may run, i.e. from affirmation onward. */
+#rec-indicator {
   display: none;
   align-items: center;
   gap: 6px;
