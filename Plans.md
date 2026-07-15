@@ -43,8 +43,8 @@
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 4.1 | [lane:gate] [tdd:required] Consent gate (B): 通話ごとの affirmation を Start 前に必須化、timestamp 付きで記録、録音インジケータ常時表示、announcement script 表示 | affirmation なしで capture が開始しないテスト green、記録ファイルに timestamp | 2.3 | cc:WIP |
-| 4.2 | [lane:gate] [tdd:skip:ui-manual-qa] Transport chrome: mode 表示、health banner（2.4 の event を表示）、suggestion card（headline ≤6 words + line、replace 方式は既存踏襲） | 手動 QA チェックリスト全項目 pass（スクリーンショット evidence） | 2.4, 3.3 | cc:TODO |
+| 4.1 | [lane:gate] [tdd:required] Consent gate (B): 通話ごとの affirmation を Start 前に必須化、timestamp 付きで記録、録音インジケータ常時表示、announcement script 表示 | affirmation なしで capture が開始しないテスト green、記録ファイルに timestamp | 2.3 | cc:完了 [93d5a2e] |
+| 4.2 | [lane:gate] [tdd:skip:ui-manual-qa] Transport chrome: mode 表示、health banner（2.4 の event を表示）、suggestion card（headline ≤6 words + line、replace 方式は既存踏襲） | 手動 QA チェックリスト全項目 pass（スクリーンショット evidence） | 2.4, 3.3 | cc:WIP |
 
 ## Phase 5: Transport A — Twilio PSTN（着手時に service 抽出）
 
