@@ -24,11 +24,15 @@ export function sidecarBinary(): string {
   return join(process.resourcesPath, 'capture')
 }
 
-/** playbook.tsv lives at the project root (Main.java read it from the cwd). */
-export function playbookPath(): string {
-  const atRoot = join(app.getAppPath(), 'playbook.tsv')
+/**
+ * playbook/ (YAML entries, spec.md §3) lives at the project root — Main.java's
+ * playbook.tsv read it from the cwd; this is the YAML-schema successor
+ * (Playbook.fromYaml() merges every *.yaml/*.yml file inside the directory).
+ */
+export function playbookDir(): string {
+  const atRoot = join(app.getAppPath(), 'playbook')
   if (existsSync(atRoot)) return atRoot
-  return join(process.cwd(), 'playbook.tsv')
+  return join(process.cwd(), 'playbook')
 }
 
 /**

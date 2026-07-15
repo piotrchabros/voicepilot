@@ -26,6 +26,7 @@
     "onnxruntime-node": "1.19.2",
     "sherpa-onnx-node": "^1.10.30",
     "ws": "^8.21.1",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

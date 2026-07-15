@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { FRAME_MS } from '@shared/types'
 import { streamFrames } from '../pipeline/frame-stream'
 import { HintEngine } from '../pipeline/hint-engine'
@@ -7,7 +6,7 @@ import { Playbook } from '../pipeline/playbook'
 import { SherpaStt } from '../pipeline/stt'
 import { TranscriptState } from '../pipeline/transcript-state'
 import { SileroVad } from '../pipeline/vad'
-import { checkModels, paths, playbookPath } from './config'
+import { checkModels, paths, playbookDir } from './config'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
 
 // `--bench <wav>`: replay a wav through the pipeline and print p50/p95 for each
@@ -115,11 +114,7 @@ export async function runBench(wav: string | undefined): Promise<void> {
 }
 
 function loadPlaybook(): Playbook {
-  try {
-    return Playbook.parse(readFileSync(playbookPath(), 'utf8'))
-  } catch {
-    return Playbook.parse('')
-  }
+  return Playbook.load(playbookDir())
 }
 
 function report(samples: Record<Stage, number[]>): void {

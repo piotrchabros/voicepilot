@@ -1,0 +1,58 @@
+# Playbook plays (spec.md §3): { id, trigger, headline, line, detail? } + phrases
+# (the trigger phrase(s) — including inflected variants — matched via
+# char-trigram cosine in src/pipeline/playbook.ts). `trigger` must be one of
+# the Tier-1 labels in src/pipeline/classifier.ts (TriggerLabel).
+entries:
+  - id: price_objection_status_quo
+    trigger: price_objection
+    headline: Cena vs koszt zwloki
+    line: zapytaj o koszt status quo
+    phrases:
+      - za drogo
+      - za drogie
+      - za drogi
+
+  - id: authority_objection_team_decides
+    trigger: authority_objection
+    headline: Kto jeszcze decyduje
+    line: umow ich na call
+    phrases:
+      - musze pogadac z zespolem
+      - musze porozmawiac z zespolem
+      - musze to skonsultowac z zespolem
+
+  - id: timing_objection_dont_send_offer
+    trigger: timing_objection
+    headline: Nie wysylaj oferty
+    line: umow 15 min na przejscie przez nia
+    phrases:
+      - wyslij oferte
+      - wyslij mi oferte
+      - prosze o oferte
+
+  - id: timing_objection_no_budget
+    trigger: timing_objection
+    headline: Kiedy planujecie budzet
+    line: zapytaj o cykl budzetowy
+    phrases:
+      - nie mamy teraz budzetu
+      - nie mamy budzetu
+      - brak budzetu na to
+
+  - id: competitor_mention_existing_vendor
+    trigger: competitor_mention
+    headline: Co zmienic w rozwiazaniu
+    line: co bys zmienil w obecnym rozwiazaniu
+    phrases:
+      - mamy juz dostawce
+      - mamy juz dostawce na to
+      - korzystamy juz z innego rozwiazania
+
+  - id: need_question_needs_to_think
+    trigger: need_question
+    headline: Co budzi watpliwosc
+    line: zapytaj co konkretnie budzi watpliwosc
+    phrases:
+      - musimy to przemyslec
+      - musimy sie zastanowic
+      - chcemy to przemyslec

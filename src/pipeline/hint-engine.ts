@@ -64,8 +64,8 @@ export class HintEngine {
     // Layer 1: instant. Synchronous, ~10ms, no excuses.
     const key = this.state.retrievalKey()
     if (key.length > 12) {
-      const hit = this.playbook.nearest(key)
-      if (hit !== null) this.sink({ text: hit, source: 'RETRIEVED' })
+      const play = this.playbook.nearestPlay(key)
+      if (play !== null) this.sink({ text: `${play.headline} — ${play.line}`, source: 'RETRIEVED' })
     }
 
     // Layer 2: debounced speculation.

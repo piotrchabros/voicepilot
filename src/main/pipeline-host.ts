@@ -1,12 +1,12 @@
 import { type UtilityProcess, utilityProcess } from 'electron'
-import { readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AudioFrame } from '@shared/audio-source'
 import type { FromPipeline, HealthMsg, Hint, InitMsg, LogMsg } from '@shared/types'
 import {
   checkModels,
   paths,
-  playbookPath,
+  playbookDir,
   sidecarBinary,
   SONIOX_LANGUAGE_HINTS,
   sonioxApiKey,
@@ -93,11 +93,15 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
   })
 
   child.once('spawn', () => {
-    let playbookTsv = ''
-    try {
-      playbookTsv = readFileSync(playbookPath(), 'utf8')
-    } catch {
-      log('warn', `playbook.tsv not found at ${playbookPath()} — retrieval layer disabled`)
+    // `playbookYaml` carries a filesystem path (directory of *.yaml/*.yml
+    // files, spec.md §3), not raw YAML text — `Playbook.fromYaml()` on the
+    // pipeline side resolves it against disk the same way this main process
+    // can. Passing a path (not file contents) keeps a multi-file playbook/
+    // directory a single round trip instead of pre-merging N files by hand.
+    let playbookYaml = playbookDir()
+    if (!existsSync(playbookYaml)) {
+      log('warn', `playbook/ not found at ${playbookYaml} — retrieval layer disabled`)
+      playbookYaml = ''
     }
     const init: InitMsg = {
       type: 'init',
@@ -109,7 +113,7 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       llamaBase: paths.llamaBase,
       systemPrompt: SYSTEM_PROMPT,
       staticContext: STATIC_CONTEXT,
-      playbookTsv,
+      playbookYaml,
       maxTurns: MAX_TURNS,
       bench: false
     }

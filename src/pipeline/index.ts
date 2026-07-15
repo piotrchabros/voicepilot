@@ -100,7 +100,7 @@ let echoWarned = false
 
 async function init(cfg: InitMsg): Promise<void> {
   try {
-    const playbook = Playbook.parse(cfg.playbookTsv)
+    const playbook = Playbook.fromYaml(cfg.playbookYaml)
     state = new TranscriptState(`${cfg.systemPrompt}`, cfg.staticContext, cfg.maxTurns)
     const llm = new LlamaClient(cfg.llamaBase)
 

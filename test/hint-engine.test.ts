@@ -5,7 +5,15 @@ import type { Generation } from '../src/pipeline/llama-client'
 import { Playbook } from '../src/pipeline/playbook'
 import { TranscriptState } from '../src/pipeline/transcript-state'
 
-const TSV = 'za drogo\tCena vs koszt zwloki'
+const YAML = `
+entries:
+  - id: price_objection_status_quo
+    trigger: price_objection
+    headline: Cena vs koszt zwloki
+    line: retencja
+    phrases:
+      - za drogo
+`
 
 interface Rec {
   prompt: string
@@ -33,7 +41,7 @@ class StubLlm implements HintLlm {
 
 function setup(): { engine: HintEngine; llm: StubLlm; state: TranscriptState; hints: Hint[] } {
   const llm = new StubLlm()
-  const playbook = Playbook.parse(TSV)
+  const playbook = Playbook.fromYaml(YAML)
   const state = new TranscriptState('sys', 'pb', 12)
   const hints: Hint[] = []
   const engine = new HintEngine(llm, playbook, state, (h) => hints.push(h))
@@ -88,7 +96,7 @@ describe('HintEngine cancel-previous (the design, not a bug)', () => {
     const { engine, state, hints } = setup()
     state.live('THEM', 'to jest za drogo dla nas')
     engine.onTranscriptUpdate()
-    expect(hints[0]).toEqual({ text: 'Cena vs koszt zwloki', source: 'RETRIEVED' })
+    expect(hints[0]).toEqual({ text: 'Cena vs koszt zwloki — retencja', source: 'RETRIEVED' })
   })
 
   it('never sinks whitespace-only generated hints', () => {

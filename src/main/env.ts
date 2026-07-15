@@ -79,7 +79,7 @@ export function validateEnv(raw: NodeJS.ProcessEnv): Env {
 /**
  * Resolves `.env`'s path: app root first (packaged/dev), else cwd. `app` is
  * only usable inside a running Electron process — falls back straight to cwd
- * under plain Node (e.g. vitest), mirroring config.ts's playbookPath pattern.
+ * under plain Node (e.g. vitest), mirroring config.ts's playbookDir pattern.
  */
 function envFilePath(): string {
   if (typeof app !== 'undefined' && typeof app.getAppPath === 'function') {

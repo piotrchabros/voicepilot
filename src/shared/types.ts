@@ -53,7 +53,7 @@ export interface InitMsg {
   readonly llamaBase: string
   readonly systemPrompt: string
   readonly staticContext: string
-  readonly playbookTsv: string
+  readonly playbookYaml: string
   readonly maxTurns: number
   readonly bench: boolean
 }
