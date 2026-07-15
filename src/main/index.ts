@@ -1,10 +1,17 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
 import type { Hint } from '@shared/types'
+import { loadEnv } from './env'
 import { startPipeline, type PipelineHandle } from './pipeline-host'
 import { runListDevices } from './list-devices'
 import { runBench } from './bench'
 import { runTtft } from './ttft'
+
+// Fail-fast at boot (Plans.md 1.2 / spec.md §4.6): a malformed .env should
+// stop the app before any window/pipeline exists, not surface as a
+// mid-session crash. Runs before the CLI-subcommand branch below too, so
+// --bench/--ttft/--list-devices get the same guarantee.
+loadEnv()
 
 // Overlay geometry — mirrors the Java Overlay: 900×90, bottom-centre, above the dock.
 const OVERLAY_W = 900

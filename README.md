@@ -73,6 +73,10 @@ mamy już dostawcę	Co byś zmienił w obecnym rozwiązaniu?
 mvn clean compile javafx:run
 ```
 
+## Secrets
+
+Copy .env.example to .env and fill in only what you need (all keys optional); it's validated fail-fast by `src/main/env.ts` (zod) on boot — the deprecated .soniox-key file fallback now warns and checks for chmod 600.
+
 ## Lint
 
 Formatting/linting is [Biome](https://biomejs.dev), configured in `biome.json`

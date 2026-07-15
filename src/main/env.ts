@@ -1,0 +1,110 @@
+import { app } from 'electron'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import dotenv from 'dotenv'
+import { z } from 'zod'
+
+/**
+ * Process-level environment configuration (spec.md §4.6 / Plans.md 1.2):
+ * secrets and config flow through `.env` + zod fail-fast, replacing the
+ * previous ad-hoc `process.env[...]` reads scattered across main/pipeline.
+ *
+ * Validation is deliberately format-only for SONIOX_WS_URL — the EU-host
+ * allowlist decision (spec.md §4.1) is `assertEuEndpoint`'s job
+ * (src/pipeline/stt-soniox.ts), not this schema's. Duplicating that check
+ * here would just create a second place to keep in sync.
+ */
+const BOOLEAN_FLAG = z.enum(['0', '1'])
+
+const envSchema = z.object({
+  SONIOX_API_KEY: z
+    .string()
+    .trim()
+    .min(10, 'must be at least 10 characters (looks truncated/placeholder)')
+    .optional(),
+  SONIOX_WS_URL: z
+    .string()
+    .trim()
+    .regex(/^wss:\/\//, 'must be a wss:// URL (EU-host allowlist is enforced separately)')
+    .optional(),
+  COPILOT_DEBUG: BOOLEAN_FLAG.optional(),
+  COPILOT_DEMO: BOOLEAN_FLAG.optional(),
+  COPILOT_NO_PROTECT: BOOLEAN_FLAG.optional(),
+  COPILOT_PLACEHOLDER: BOOLEAN_FLAG.optional(),
+  COPILOT_MIC_SPECULATE: BOOLEAN_FLAG.optional()
+})
+
+export type Env = z.infer<typeof envSchema>
+
+const SCHEMA_KEYS = Object.keys(envSchema.shape)
+
+/**
+ * Blank values ("" or whitespace-only) are treated as unset, not invalid —
+ * the same rule the pre-1.2 code applied via `.trim(); if (len > 0)`. This
+ * matters because .env.example ships every key present but empty
+ * (`SONIOX_API_KEY=`); copying it to `.env` untouched must still boot
+ * cleanly (falling back to `.soniox-key`/local engine), not throw.
+ */
+function blankToUnset(raw: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const normalized: NodeJS.ProcessEnv = { ...raw }
+  for (const key of SCHEMA_KEYS) {
+    const value = normalized[key]
+    if (value !== undefined && value.trim().length === 0) {
+      delete normalized[key]
+    }
+  }
+  return normalized
+}
+
+/**
+ * Validates a raw environment object against the schema. Pure/sync — no
+ * filesystem or Electron access — so it's directly testable with a plain
+ * object, independent of `.env` file discovery or app.getAppPath().
+ *
+ * Fail-fast: throws a single Error listing every offending variable and why,
+ * rather than surfacing one problem at a time. Unknown keys are ignored (zod
+ * strips anything not declared in envSchema by default).
+ */
+export function validateEnv(raw: NodeJS.ProcessEnv): Env {
+  const result = envSchema.safeParse(blankToUnset(raw))
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('\n')
+    throw new Error(`Invalid environment configuration:\n${details}`)
+  }
+  return result.data
+}
+
+/**
+ * Resolves `.env`'s path: app root first (packaged/dev), else cwd. `app` is
+ * only usable inside a running Electron process — falls back straight to cwd
+ * under plain Node (e.g. vitest), mirroring config.ts's playbookPath pattern.
+ */
+function envFilePath(): string {
+  if (typeof app !== 'undefined' && typeof app.getAppPath === 'function') {
+    const atAppRoot = join(app.getAppPath(), '.env')
+    if (existsSync(atAppRoot)) return atAppRoot
+  }
+  return join(process.cwd(), '.env')
+}
+
+/**
+ * Loads `.env` (if present — never required, cloud STT is optional) and
+ * validates process.env. Call at boot, synchronously, before app.whenReady()
+ * / window creation, so a misconfigured secret fails the boot rather than
+ * degrading silently mid-session (1.1 reviewer recommendation).
+ *
+ * Deliberately not memoized: config.ts's sonioxApiKey()/sonioxWsUrl() call
+ * this on every read (as the pre-1.2 code did with process.env directly), so
+ * tests that mutate process.env between assertions keep seeing live values.
+ * dotenv.config() is idempotent — it never overwrites a key process.env
+ * already has — so repeat calls are cheap and side-effect-free.
+ */
+export function loadEnv(): Env {
+  const envPath = envFilePath()
+  if (existsSync(envPath)) {
+    dotenv.config({ path: envPath })
+  }
+  return validateEnv(process.env)
+}

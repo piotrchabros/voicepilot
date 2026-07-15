@@ -1,7 +1,8 @@
 import { app } from 'electron'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { loadEnv } from './env'
 import { assertEuEndpoint, EU_SONIOX_WS_URL } from '../pipeline/stt-soniox'
 
 // Runtime paths, mirroring Main.java's `~/models` layout and the README.
@@ -31,18 +32,34 @@ export function playbookPath(): string {
 }
 
 /**
- * Soniox API key: SONIOX_API_KEY env var, or a git-ignored `.soniox-key` file at
- * the project root. Null when absent — the pipeline then uses the local engine.
+ * Soniox API key: SONIOX_API_KEY in `.env` (validated fail-fast by env.ts —
+ * Plans.md 1.2 / spec.md §4.6), or a git-ignored `.soniox-key` file at the
+ * project root as a deprecated fallback. Null when absent — the pipeline
+ * then uses the local engine.
  */
 export function sonioxApiKey(): string | null {
-  const env = process.env['SONIOX_API_KEY']?.trim()
-  if (env !== undefined && env.length > 0) return env
+  const fromEnv = loadEnv().SONIOX_API_KEY
+  if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv
   const keyFile = join(app.getAppPath(), '.soniox-key')
   if (existsSync(keyFile)) {
     const key = readFileSync(keyFile, 'utf8').trim()
-    if (key.length > 0) return key
+    if (key.length > 0) {
+      console.warn('[deprecated] .soniox-key file — migrate to SONIOX_API_KEY in .env')
+      warnIfKeyFileNotLockedDown(keyFile)
+      return key
+    }
   }
   return null
+}
+
+/** chmod 600 recommendation — the key file readable by group/other is a leak. */
+function warnIfKeyFileNotLockedDown(keyFile: string): void {
+  const mode = statSync(keyFile).mode & 0o777
+  if (mode !== 0o600) {
+    console.warn(
+      `[deprecated] .soniox-key permissions are ${mode.toString(8)}, not 600 — run \`chmod 600 ${keyFile}\` to keep the key readable by you only.`
+    )
+  }
 }
 
 /** Transcript language hints for Soniox — Polish-first sales calls. */
@@ -56,7 +73,7 @@ export const SONIOX_LANGUAGE_HINTS = ['pl', 'en'] as const
  * constructor (defense-in-depth for any other caller that builds a URL).
  */
 export function sonioxWsUrl(): string {
-  const env = process.env['SONIOX_WS_URL']?.trim()
+  const env = loadEnv().SONIOX_WS_URL
   if (env !== undefined && env.length > 0) return assertEuEndpoint(env)
   return EU_SONIOX_WS_URL
 }

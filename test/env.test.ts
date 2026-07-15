@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest'
+import { validateEnv } from '../src/main/env'
+
+// Plans.md 1.2 / spec.md §4.6: secrets consolidate through .env + zod
+// fail-fast. These cases exercise validateEnv directly (no filesystem/
+// Electron dependency) so they run in plain Node under vitest.
+describe('validateEnv', () => {
+  it('accepts an empty environment — every field is optional', () => {
+    expect(() => validateEnv({})).not.toThrow()
+    expect(validateEnv({})).toEqual({})
+  })
+
+  it('accepts a fully-populated valid environment', () => {
+    const raw = {
+      SONIOX_API_KEY: 'sk-1234567890abcdef',
+      SONIOX_WS_URL: 'wss://stt-rt.eu.soniox.com/transcribe-websocket',
+      COPILOT_DEBUG: '1',
+      COPILOT_DEMO: '0',
+      COPILOT_NO_PROTECT: '0',
+      COPILOT_PLACEHOLDER: '1',
+      COPILOT_MIC_SPECULATE: '0'
+    }
+    expect(validateEnv(raw)).toEqual(raw)
+  })
+
+  it('ignores unrelated/unknown keys (e.g. PATH, HOME)', () => {
+    const raw = { PATH: '/usr/bin', HOME: '/Users/x', SONIOX_API_KEY: 'sk-1234567890' }
+    const parsed = validateEnv(raw)
+    expect(parsed).toEqual({ SONIOX_API_KEY: 'sk-1234567890' })
+  })
+
+  it('throws — naming the variable — when SONIOX_API_KEY is too short', () => {
+    expect(() => validateEnv({ SONIOX_API_KEY: 'short' })).toThrow(/SONIOX_API_KEY/)
+  })
+
+  it('throws — naming the variable — for a malformed SONIOX_WS_URL (not wss://)', () => {
+    expect(() =>
+      validateEnv({ SONIOX_WS_URL: 'https://stt-rt.eu.soniox.com/transcribe-websocket' })
+    ).toThrow(/SONIOX_WS_URL/)
+  })
+
+  it('throws for a garbage (non-URL-shaped) SONIOX_WS_URL', () => {
+    expect(() => validateEnv({ SONIOX_WS_URL: 'not-a-url' })).toThrow(/SONIOX_WS_URL/)
+  })
+
+  it('throws — naming the variable — for a COPILOT_* flag outside 0/1', () => {
+    expect(() => validateEnv({ COPILOT_DEBUG: 'true' })).toThrow(/COPILOT_DEBUG/)
+  })
+
+  it('treats blank values as unset — copying .env.example untouched must still boot', () => {
+    // .env.example ships every key present but empty (`SONIOX_API_KEY=`);
+    // dotenv parses that as an empty string, not "absent".
+    const raw = {
+      SONIOX_API_KEY: '',
+      SONIOX_WS_URL: '   ',
+      COPILOT_DEBUG: ''
+    }
+    expect(() => validateEnv(raw)).not.toThrow()
+    expect(validateEnv(raw)).toEqual({})
+  })
+
+  it('reports every offending variable in one throw, not just the first', () => {
+    expect.assertions(2)
+    try {
+      validateEnv({ SONIOX_API_KEY: 'x', COPILOT_DEBUG: 'yes' })
+    } catch (err) {
+      const message = (err as Error).message
+      expect(message).toMatch(/SONIOX_API_KEY/)
+      expect(message).toMatch(/COPILOT_DEBUG/)
+    }
+  })
+})
