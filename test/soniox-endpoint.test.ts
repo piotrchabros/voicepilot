@@ -24,6 +24,16 @@ describe('assertEuEndpoint', () => {
     expect(() => assertEuEndpoint('wss://evil.example.com/transcribe-websocket')).toThrow()
   })
 
+  it('rejects a hostname that merely contains the EU host as a prefix-lookalike', () => {
+    expect(() => assertEuEndpoint('wss://evil-stt-rt.eu.soniox.com/transcribe-websocket')).toThrow()
+  })
+
+  it('rejects a hostname that appends the EU host as a subdomain of an attacker domain', () => {
+    expect(() =>
+      assertEuEndpoint('wss://stt-rt.eu.soniox.com.evil.example/transcribe-websocket')
+    ).toThrow()
+  })
+
   it('rejects a non-TLS (ws://) scheme even against the correct host', () => {
     expect(() => assertEuEndpoint('ws://stt-rt.eu.soniox.com/transcribe-websocket')).toThrow()
   })

@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { EU_SONIOX_WS_URL } from '../pipeline/stt-soniox'
+import { assertEuEndpoint, EU_SONIOX_WS_URL } from '../pipeline/stt-soniox'
 
 // Runtime paths, mirroring Main.java's `~/models` layout and the README.
 const MODELS = join(homedir(), 'models')
@@ -50,13 +50,14 @@ export const SONIOX_LANGUAGE_HINTS = ['pl', 'en'] as const
 
 /**
  * Soniox WS endpoint (spec.md §4.1, EU data residency). Config-driven via
- * SONIOX_WS_URL; defaults to the documented EU host when unset. The actual
- * boot assertion (host allowlist + TLS) lives in stt-soniox.ts::assertEuEndpoint
- * so it runs wherever a SonioxStt is constructed, not just here.
+ * SONIOX_WS_URL; defaults to the documented EU host when unset. Asserted here
+ * (main-process boot, throws on misconfiguration — "config error = app won't
+ * start", not a silent degrade) AND again in stt-soniox.ts's SonioxStt
+ * constructor (defense-in-depth for any other caller that builds a URL).
  */
 export function sonioxWsUrl(): string {
   const env = process.env['SONIOX_WS_URL']?.trim()
-  if (env !== undefined && env.length > 0) return env
+  if (env !== undefined && env.length > 0) return assertEuEndpoint(env)
   return EU_SONIOX_WS_URL
 }
 

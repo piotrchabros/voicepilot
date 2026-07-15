@@ -21,6 +21,35 @@ if (!apiKey) {
   process.exit(1)
 }
 
+// EU host allowlist — must stay in sync with EU_SONIOX_HOST in
+// src/pipeline/stt-soniox.ts (that's the TS source of truth; this .mjs script
+// can't import it directly, so the literal is duplicated here deliberately).
+const EU_SONIOX_HOST = 'stt-rt.eu.soniox.com'
+const EU_SONIOX_WS_URL = `wss://${EU_SONIOX_HOST}/transcribe-websocket`
+
+function assertEuEndpoint(url) {
+  if (!url || url.trim().length === 0) return EU_SONIOX_WS_URL
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    console.error(
+      `Invalid Soniox WS URL "${url}" — must be ${EU_SONIOX_WS_URL} (spec.md §4.1, EU data residency).`
+    )
+    process.exit(1)
+  }
+  if (parsed.protocol !== 'wss:' || parsed.hostname !== EU_SONIOX_HOST) {
+    console.error(
+      `Refusing to start: Soniox WS endpoint "${url}" is not the documented EU host. ` +
+        `Set SONIOX_WS_URL to ${EU_SONIOX_WS_URL} (spec.md §4.1, EU data residency).`
+    )
+    process.exit(1)
+  }
+  return url
+}
+
+const wsUrl = assertEuEndpoint(process.env.SONIOX_WS_URL)
+
 const wavPath = process.argv[2] ?? '/tmp/say.wav'
 const buf = readFileSync(wavPath)
 let ds = 44,
@@ -39,9 +68,7 @@ while (off + 8 <= buf.length) {
 const pcm = buf.subarray(ds, Math.min(ds + dl, buf.length))
 console.log(`streaming ${wavPath} (${(pcm.length / 32000).toFixed(1)}s) to Soniox...`)
 
-const ws = new WebSocket(
-  process.env.SONIOX_WS_URL ?? 'wss://stt-rt.eu.soniox.com/transcribe-websocket'
-)
+const ws = new WebSocket(wsUrl)
 let finals = ''
 let nonFinal = ''
 const t0 = Date.now()
