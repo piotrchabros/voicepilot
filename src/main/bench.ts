@@ -90,7 +90,7 @@ export async function runBench(wav: string | undefined): Promise<void> {
       engine.onTranscriptUpdate()
     } else if (ev === 'TURN_END') {
       stt.accept(frame)
-      engine.onTurnEnd('THEM', stt.finish())
+      engine.onTurnEnd('THEM', await stt.finish())
     }
     await delay(FRAME_MS)
   }

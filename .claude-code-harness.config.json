@@ -1,0 +1,8 @@
+{
+  "runtimefloor": {
+    "secretAllow": [
+      ".env",
+      ".soniox-key"
+    ]
+  }
+}

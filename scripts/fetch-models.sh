@@ -35,3 +35,6 @@ echo "==> Done."
 echo "silero:    $(ls -la "$MODELS/silero_vad.onnx" | awk '{print $5, $9}')"
 echo "zipformer: $DST"
 ls -la "$DST"
+
+echo "==> [3/3] Parakeet-TDT 0.6b v3 int8 (25 EU languages incl. Polish)"
+bash "$(dirname "$0")/fetch-parakeet.sh"

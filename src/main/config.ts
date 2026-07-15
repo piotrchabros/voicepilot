@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -29,9 +29,28 @@ export function playbookPath(): string {
   return join(process.cwd(), 'playbook.tsv')
 }
 
+/**
+ * Soniox API key: SONIOX_API_KEY env var, or a git-ignored `.soniox-key` file at
+ * the project root. Null when absent — the pipeline then uses the local engine.
+ */
+export function sonioxApiKey(): string | null {
+  const env = process.env['SONIOX_API_KEY']?.trim()
+  if (env !== undefined && env.length > 0) return env
+  const keyFile = join(app.getAppPath(), '.soniox-key')
+  if (existsSync(keyFile)) {
+    const key = readFileSync(keyFile, 'utf8').trim()
+    if (key.length > 0) return key
+  }
+  return null
+}
+
+/** Transcript language hints for Soniox — Polish-first sales calls. */
+export const SONIOX_LANGUAGE_HINTS = ['pl', 'en'] as const
+
 export interface ModelReadiness {
   silero: boolean
   zipformer: boolean
+  soniox: boolean
   gguf: boolean
   ok: boolean
 }
@@ -43,6 +62,8 @@ export function checkModels(): ModelReadiness {
     existsSync(join(paths.zipformer, 'decoder.onnx')) &&
     existsSync(join(paths.zipformer, 'joiner.onnx')) &&
     existsSync(join(paths.zipformer, 'tokens.txt'))
+  const soniox = sonioxApiKey() !== null
   const gguf = existsSync(paths.gguf)
-  return { silero, zipformer, gguf, ok: silero && zipformer }
+  // The VAD is always required; STT needs either the cloud key or local models.
+  return { silero, zipformer, soniox, gguf, ok: silero && (soniox || zipformer) }
 }

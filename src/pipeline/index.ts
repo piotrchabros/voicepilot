@@ -17,6 +17,7 @@ import { LlamaClient } from './llama-client'
 import { Playbook } from './playbook'
 import { SherpaStt } from './stt'
 import type { SttEngine } from './stt-engine'
+import { SonioxStt } from './stt-soniox'
 import { TranscriptState } from './transcript-state'
 import { SileroVad } from './vad'
 
@@ -72,12 +73,23 @@ async function init(cfg: InitMsg): Promise<void> {
       send({ type: 'hint', hint })
     })
 
-    // One VAD + STT per leg. Mic = ME, system = THEM.
+    // One VAD + STT per leg. Mic = ME, system = THEM. Soniox (cloud, Polish)
+    // when a key is configured; local English zipformer otherwise.
+    // COPILOT_MIC_SPECULATE=1 (solo testing): the mic leg plays the CUSTOMER —
+    // its transcript renders as "Them:" so the prompt makes sense to the LLM.
+    const micAsThem = process.env['COPILOT_MIC_SPECULATE'] === '1'
     for (const leg of [0x00, 0x01] as Leg[]) {
       const vad = await SileroVad.create(cfg.sileroPath)
-      const stt = new SherpaStt(cfg.zipformerDir)
+      const stt: SttEngine =
+        cfg.sonioxApiKey !== null
+          ? new SonioxStt({
+              apiKey: cfg.sonioxApiKey,
+              languageHints: [...cfg.sonioxLanguageHints],
+              onLog: (level, msg) => log(level, msg),
+            })
+          : new SherpaStt(cfg.zipformerDir)
       legs.set(leg, {
-        who: speakerOf(leg),
+        who: micAsThem && leg === 0x00 ? 'THEM' : speakerOf(leg),
         vad,
         stt,
         tail: Promise.resolve(),
@@ -141,16 +153,13 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
       leg.stt.accept(samples)
       state.live(leg.who, leg.stt.interim())
       // Only speculate on THEIR speech. Hinting at yourself mid-sentence is just
-      // distracting. COPILOT_MIC_SPECULATE=1 lifts this for testing so the mic
-      // leg alone can drive hints (no Screen Recording permission needed).
-      if (leg.who === 'THEM' || process.env['COPILOT_MIC_SPECULATE'] === '1') {
-        engine.onTranscriptUpdate()
-      }
+      // distracting. (In COPILOT_MIC_SPECULATE test mode the mic leg IS 'THEM'.)
+      if (leg.who === 'THEM') engine.onTranscriptUpdate()
       break
     }
     case 'TURN_END': {
       leg.stt.accept(samples)
-      const finalText = leg.stt.finish()
+      const finalText = await leg.stt.finish()
       if (DEBUG) log('info', `${leg.who}: turn end -> "${finalText}"`)
       engine.onTurnEnd(leg.who, finalText)
       break

@@ -45,6 +45,9 @@ export interface InitMsg {
   readonly type: 'init'
   readonly sileroPath: string
   readonly zipformerDir: string
+  /** Soniox API key. When set, the cloud Soniox engine replaces local zipformer. */
+  readonly sonioxApiKey: string | null
+  readonly sonioxLanguageHints: readonly string[]
   readonly llamaBase: string
   readonly systemPrompt: string
   readonly staticContext: string

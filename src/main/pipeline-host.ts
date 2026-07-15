@@ -2,7 +2,7 @@ import { type UtilityProcess, utilityProcess } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FromPipeline, Hint, InitMsg, Leg, LogMsg } from '@shared/types'
-import { checkModels, paths, playbookPath, sidecarBinary } from './config'
+import { checkModels, paths, playbookPath, sidecarBinary, SONIOX_LANGUAGE_HINTS, sonioxApiKey } from './config'
 import { LlamaSupervisor } from './llama-supervisor'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
 import { Sidecar } from './sidecar'
@@ -32,12 +32,15 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
   if (!models.ok) {
     const missing = [
       !models.silero && 'silero_vad.onnx',
-      !models.zipformer && 'zipformer-streaming/{encoder,decoder,joiner}.onnx + tokens.txt',
+      !models.soniox &&
+        !models.zipformer &&
+        'STT: SONIOX_API_KEY (or .soniox-key) or zipformer-streaming/ models',
     ].filter(Boolean)
-    log('warn', `models missing in ${paths.models}: ${missing.join(', ')} — pipeline idle. See README step 2.`)
+    log('warn', `missing in ${paths.models}: ${missing.join(', ')} — pipeline idle. See README step 2.`)
     // Still return a handle; the overlay runs standalone.
     return { shutdown: () => {} }
   }
+  log('info', `stt engine: ${models.soniox ? 'soniox (cloud, pl+en)' : 'local zipformer (en)'}`)
 
   // 1. Spawn the pipeline utilityProcess.
   const child: UtilityProcess = utilityProcess.fork(join(__dirname, 'pipeline.js'), [], {
@@ -76,6 +79,8 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       type: 'init',
       sileroPath: paths.silero,
       zipformerDir: paths.zipformer,
+      sonioxApiKey: sonioxApiKey(),
+      sonioxLanguageHints: SONIOX_LANGUAGE_HINTS,
       llamaBase: paths.llamaBase,
       systemPrompt: SYSTEM_PROMPT,
       staticContext: STATIC_CONTEXT,

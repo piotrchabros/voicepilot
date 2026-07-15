@@ -52,12 +52,12 @@ export class SherpaStt implements SttEngine {
     return this.recognizer.getResult(this.stream).text.trim()
   }
 
-  finish(): string {
+  finish(): Promise<string> {
     const text = this.interim()
     // Reset the stream for the next turn (the Node binding resets in place rather
     // than release + recreate).
     this.recognizer.reset(this.stream)
-    return text
+    return Promise.resolve(text)
   }
 
   close(): void {

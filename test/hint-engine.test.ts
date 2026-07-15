@@ -12,12 +12,15 @@ interface Rec {
   cancelled: boolean
 }
 
-/** Stub LLM: records every generation and whether it was cancelled. */
+/** Stub LLM: records every generation and whether it was cancelled. Feeds each
+ *  generation the token strings queued in `nextTokens` (default: none). */
 class StubLlm implements HintLlm {
   readonly gens: Rec[] = []
-  streamHint(prompt: string): Generation {
+  nextTokens: string[][] = []
+  streamHint(prompt: string, onToken: (tok: string) => void): Generation {
     const rec: Rec = { prompt, cancelled: false }
     this.gens.push(rec)
+    for (const tok of this.nextTokens.shift() ?? []) onToken(tok)
     return {
       cancel: () => {
         rec.cancelled = true
@@ -86,6 +89,29 @@ describe('HintEngine cancel-previous (the design, not a bug)', () => {
     state.live('THEM', 'to jest za drogo dla nas')
     engine.onTranscriptUpdate()
     expect(hints[0]).toEqual({ text: 'Cena vs koszt zwloki', source: 'RETRIEVED' })
+  })
+
+  it('never sinks whitespace-only generated hints', () => {
+    const { engine, llm, state, hints } = setup()
+    llm.nextTokens = [[' ', '\t']]
+    state.live('THEM', 'jakas dluga wypowiedz klienta wlasnie teraz')
+    engine.onTranscriptUpdate()
+    vi.advanceTimersByTime(DEBOUNCE_MS)
+    expect(hints.filter((h) => h.source === 'GENERATED')).toHaveLength(0)
+  })
+
+  it('retries once when an uncancelled generation completes empty', async () => {
+    const { engine, llm, state, hints } = setup()
+    llm.nextTokens = [[], ['Zapytaj', ' o budzet']] // 1st empty, 2nd real
+    state.live('THEM', 'nie mamy na to budzetu w tym roku')
+    engine.onTranscriptUpdate()
+    vi.advanceTimersByTime(DEBOUNCE_MS)
+    await Promise.resolve() // let gen.done settle
+    await Promise.resolve()
+    expect(llm.gens).toHaveLength(2) // the single retry
+    expect(hints.at(-1)).toEqual({ text: 'Zapytaj o budzet', source: 'GENERATED' })
+    // And the retry itself must not loop: a second empty stays empty.
+    expect(llm.gens[1]?.cancelled).toBe(false)
   })
 
   it('shutdown cancels the in-flight generation', () => {

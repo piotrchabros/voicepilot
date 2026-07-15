@@ -68,12 +68,12 @@ export class HintEngine {
     this.pending = setTimeout(() => this.speculate(), DEBOUNCE_MS)
   }
 
-  private speculate(): void {
+  private speculate(retried = false): void {
     this.pending = null
     const prompt = this.state.renderPrompt()
 
     // Interim transcripts revise themselves constantly; don't re-run on a no-op.
-    if (prompt === this.lastPrompt) return
+    if (!retried && prompt === this.lastPrompt) return
     this.lastPrompt = prompt
 
     // Kill the previous speculation. It was based on a transcript that no longer
@@ -83,14 +83,28 @@ export class HintEngine {
 
     let acc = ''
     this.onSpeculate?.()
-    this.inFlight = this.llm.streamHint(
+    const gen = this.llm.streamHint(
       prompt,
       (tok) => {
         acc += tok
-        this.sink({ text: acc.trim(), source: 'GENERATED' })
+        const text = acc.trim()
+        // Whitespace-only accumulations are noise, not a hint — don't paint them.
+        if (text.length > 0) this.sink({ text, source: 'GENERATED' })
       },
       { onFirstToken: () => this.onFirstToken?.() },
     )
+    this.inFlight = gen
+
+    // Sampling variance sometimes opens with "\n" and instantly hits the stop —
+    // a COMPLETED-but-empty generation. Retry that once. (Aborted generations
+    // are different: they are supposed to die; never retry those.)
+    if (!retried) {
+      void gen.done.then(() => {
+        if (!gen.isCancelled() && acc.trim().length === 0 && this.inFlight === gen) {
+          this.speculate(true)
+        }
+      })
+    }
   }
 
   /**
