@@ -5,6 +5,8 @@ Real-time conversation copilot. Fully local, macOS, Java 21+.
 Listens to both legs of a call, speculatively generates a hint on every interim
 transcript update, and shows it before the other person has finished talking.
 
+Compliance/legal blocker status (Soniox/Twilio DPAs, consent wording, EU region) is tracked in [`docs/compliance.md`](docs/compliance.md) — real-prospect calls are gated on it.
+
 ## The one idea
 
 The serial path — VAD → STT → turn-end → LLM → render — is 400-800ms and cannot

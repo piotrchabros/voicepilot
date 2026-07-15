@@ -9,8 +9,8 @@
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 0.1 | [lane:fast] [tdd:skip:tooling-only] Lint/formatter baseline 導入（biome、`npm run lint` + `npm run format:check`） | lint スクリプトが exit 0、CI 相当コマンドが README に記載 | - | cc:TODO |
-| 0.2 | [lane:gate] [tdd:required] Log hygiene: transcript/hint 本文を debug モード以外のログから排除（`pipeline/index.ts` の turn-end / hint ログを COPILOT_DEBUG ゲートで検証） | DEBUG off で起動したログに通話本文が 0 件（テストで検証）、spec.md §4.4 準拠 | - | cc:TODO |
+| 0.1 | [lane:fast] [tdd:skip:tooling-only] Lint/formatter baseline 導入（biome、`npm run lint` + `npm run format:check`） | lint スクリプトが exit 0、CI 相当コマンドが README に記載 | - | cc:WIP |
+| 0.2 | [lane:gate] [tdd:required] Log hygiene: transcript/hint 本文を debug モード以外のログから排除（`pipeline/index.ts` の turn-end / hint ログを COPILOT_DEBUG ゲートで検証） | DEBUG off で起動したログに通話本文が 0 件（テストで検証）、spec.md §4.4 準拠 | - | cc:WIP |
 
 ## Phase 1: EU compliance hardening（既存コードの是正）
 
@@ -18,7 +18,7 @@
 |------|------|-----|---------|--------|
 | 1.1 | [lane:gate] [tdd:required] Soniox EU endpoint: `SONIOX_WS_URL` config 化 + boot assertion（EU host allowlist に解決先が一致しなければ起動拒否）。`stt-soniox.ts:26` と `scripts/soniox-check.mjs` の hardcode を除去。EU hostname は live docs から取得（unknown → 調査 evidence を残す） | 非 EU URL で起動失敗するテスト green、EU URL で live smoke 成功 | 0.1 | cc:TODO |
 | 1.2 | [lane:gate] [tdd:skip:config-only] Secrets 一本化: `.env` + zod fail-fast、`.soniox-key` は deprecated fallback（warn 出力、chmod 600） | 必須 env 欠落で boot が明示エラー、warn が出る | 1.1 | cc:TODO |
-| 1.3 | [lane:gate] [tdd:skip:human-legal] DPA/法務ブロッカー台帳: Soniox EU region 有効化確認、Soniox/Twilio DPA 締結状況、consent 文言（PL）法務レビュー、rep 監視（労働法）注記を `docs/compliance.md` に記録。**real-prospect call はこれらが green になるまで禁止** | 台帳が存在し、各項目に 状態（done/unknown/blocked）と根拠リンクが付く | - | cc:TODO |
+| 1.3 | [lane:gate] [tdd:skip:human-legal] DPA/法務ブロッカー台帳: Soniox EU region 有効化確認、Soniox/Twilio DPA 締結状況、consent 文言（PL）法務レビュー、rep 監視（労働法）注記を `docs/compliance.md` に記録。**real-prospect call はこれらが green になるまで禁止** | 台帳が存在し、各項目に 状態（done/unknown/blocked）と根拠リンクが付く | - | cc:完了 [db49eae] |
 
 ## Phase 2: AudioSource seam（transport-agnostic 化）
 
