@@ -28,9 +28,14 @@ if (announcement.isPlaceholder) {
   )
 }
 
-// Overlay geometry — mirrors the Java Overlay: 900×90, bottom-centre, above the dock.
+// Overlay geometry — mirrors the Java Overlay: 900×150, bottom-centre, above
+// the dock. Height grew from 90 (Task 4.2 reviewer finding): the two-line
+// RETRIEVED suggestion card (headline + line, ~89.2px at 90px pill padding)
+// left <1px of margin against the window edge, risking headline clipping and
+// overlap with the top-center health banner. 150 gives the two-line pill
+// (with its now-tighter 14px padding, see overlay.css) real headroom.
 const OVERLAY_W = 900
-const OVERLAY_H = 90
+const OVERLAY_H = 150
 const BOTTOM_GAP = 100 // px above the bottom of the work area
 
 let overlay: BrowserWindow | null = null

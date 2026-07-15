@@ -42,4 +42,30 @@ describe('hintDisplayFor', () => {
       line: 'Line'
     })
   })
+
+  // Defensive/spec-pinning: hintDisplayFor splits on the *first* ' — '
+  // occurrence in the whole `${headline} — ${line}` string (hint-engine.ts's
+  // wire format). This is the contract, not an accident — but it means an
+  // entry whose `headline` field itself contains an em-dash (e.g. a playbook
+  // author writing "Budget — timing mismatch" as one headline) does NOT
+  // round-trip: the first em-dash it hits — inside the headline — is
+  // (wrongly, from that author's intent) treated as the headline/line
+  // separator, truncating the headline early and pushing the rest of it into
+  // `line`. Pinned here as current behavior, not a recommendation.
+  // playbook.ts's `validateEntry` doesn't currently reject em-dashes inside a
+  // `headline` field; if this ambiguity becomes a real authoring problem, add
+  // that guard there (reject/escape em-dash in `headline`) rather than
+  // changing the first-index split here, since the wire format itself has no
+  // other way to know where a headline ends.
+  it('splits at the first em-dash — even when that happens to fall inside text a playbook author intended as one headline', () => {
+    expect(
+      hintDisplayFor({
+        text: 'Budget — timing mismatch — Ask which quarter the budget actually resets.',
+        source: 'RETRIEVED'
+      })
+    ).toEqual({
+      headline: 'Budget',
+      line: 'timing mismatch — Ask which quarter the budget actually resets.'
+    })
+  })
 })

@@ -40,6 +40,17 @@ body {
   opacity: 1;
 }
 
+/* Two-line (RETRIEVED headline + line) mode gets tighter vertical padding
+   than the single-line default above — reviewer finding (Task 4.2): at the
+   default 18px padding, the two-line card's computed height (~89.2px) left
+   <1px of margin against the (former) 90px overlay window, risking headline
+   clipping. 14px padding plus the taller OVERLAY_H=150 (src/main/index.ts)
+   gives real headroom against both the window edge and the top-center
+   health banner. */
+#pill.two-line {
+  padding: 14px 28px;
+}
+
 /* Headline: the bold, bigger line. Holds the single GENERATED line too, so
    its base weight/size doubles as that case (spec.md §5 "headline ≤6 words"). */
 #hint-headline {

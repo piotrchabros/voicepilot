@@ -57,8 +57,16 @@ spec.md §5 "headline ≤6 words + one line"), both dimmed relative to the
 GENERATED state. Once GENERATED lands, the pill collapses to a single bold,
 full-brightness line, and the detail line disappears (no leftover blank
 gap — see `#pill:not(.two-line) #hint-line { display: none }`).
-**Verify**: two screenshots — one mid-RETRIEVED (two-line, dimmed), one
-post-GENERATED (single-line, bright) — same manual/bench session.
+**No headline clipping**: with the two-line card up, confirm the top edge of
+the bold headline text is fully visible with clear margin below the window's
+top edge — not touching or cut off by it. This checks the reviewer finding
+that OVERLAY_H=90 + 18px padding left <1px of margin for the two-line card;
+OVERLAY_H is now 150 (`src/main/index.ts`) with 14px two-line padding
+(`#pill.two-line` in `overlay.css`), so there should be generous headroom, not
+a hairline margin.
+**Verify**: two screenshots — one mid-RETRIEVED (two-line, dimmed, headline
+top-edge visibly clear of the window edge), one post-GENERATED (single-line,
+bright) — same manual/bench session.
 
 ### (d) Health banner: sidecar kill shows a red banner, auto-dismisses after 10s
 
@@ -82,12 +90,22 @@ whichever happens first — note which case was observed.
 
 1. Trigger (c) and (d) simultaneously (or in close succession so both are
    visible at once), with the REC indicator + mode chip already up from (b).
+2. Specifically reproduce the reviewer's worst case: the **two-line RETRIEVED
+   card** (tallest hint-pill state, see item (c)) shown at the same time as
+   the **health banner** (top-center).
 
 **Expect**: hint pill (bottom-center), health banner (top-center), and
 top-left transport chrome (mode chip + REC) occupy visually distinct regions
 of the window at all times — no visual overlap or clipping, at the window's
-default size.
-**Verify**: one screenshot with all three regions populated at once.
+default size (900×150, `OVERLAY_W`/`OVERLAY_H` in `src/main/index.ts`).
+**No two-line + health-banner overlap**: with the two-line hint pill and the
+health banner both visible simultaneously, confirm there is a visible gap
+between the bottom edge of the health banner and the top edge of the
+two-line hint pill — the tallest hint state must never touch or overlap the
+banner.
+**Verify**: one screenshot with all three regions populated at once, and a
+second screenshot specifically showing the two-line hint pill + health banner
+together with a visible gap between them.
 
 ### (f) `COPILOT_NO_PROTECT=1` allows screenshot evidence to be captured
 
