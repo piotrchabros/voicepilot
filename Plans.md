@@ -25,7 +25,7 @@
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 2.1 | [lane:gate] [tdd:required] `AudioSource`/`AudioFrame`/`SpeakerRole`/`separation` 型を `src/shared` に定義（spec.md §2 の Float32 決定に従う） | 型 + parameterized contract test suite（frame 形状 / t 単調増加 / end 一回 / health 発火）が存在し green | 0.1 | cc:完了 [78bb76e] |
-| 2.2 | [lane:gate] [tdd:required] `FileAudioSource`: 既存 `wav.ts` を包んで AudioFrame を natural cadence で emit（bench.ts と統合） | contract suite を pass、bench が FileAudioSource 経由で動く | 2.1 | cc:完了 [c37759b] |
+| 2.2 | [lane:gate] [tdd:required] `FileAudioSource`: 既存 `wav.ts` を包んで AudioFrame を natural cadence で emit（bench.ts と統合） | contract suite を pass、bench が FileAudioSource 経由で動く | 2.1 | cc:完了 [3a86ea6] |
 | 2.3 | [lane:gate] [tdd:required] `SystemAudioSource`: 既存 sidecar demux（`main/sidecar.ts`）を adapter で包む。mic→rep / loopback→prospect、`separation:'mixed'`、sample-count 由来の `t` を付与 | contract suite pass、既存 E2E がこの seam 経由で動作 | 2.1 | cc:WIP |
 | 2.4 | [lane:gate] [tdd:required] Health events end-to-end: sidecar exit / device loss / Soniox 切断 → UI banner（現在は log のみ） | 各障害の注入テストで `health {ok:false}` が UI まで届く | 2.3 | cc:TODO |
 

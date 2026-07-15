@@ -1,7 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AudioFrame } from '@shared/audio-source'
+import { FRAME_MS } from '@shared/types'
 import { FileAudioSource } from '../src/pipeline/file-audio-source'
 import { type AudioSourceHarness, describeAudioSourceContract } from './audio-source-contract'
 
@@ -122,5 +124,83 @@ describe('FileAudioSource (file-specific behavior)', () => {
     expect(statuses[0]?.ok).toBe(false)
     expect(statuses[0]?.detail).toContain(missingWavPath)
     expect(endReason).toBe('missing-file')
+  })
+})
+
+// `realtime: true` is the default and the mode `--bench` actually uses
+// (`src/main/bench.ts` via `streamFrames`), so its `setTimeout`-paced
+// `driveRealtime` path needs its own coverage — the contract suite above
+// always drives `realtime: false` for speed.
+describe('FileAudioSource (realtime driving, default mode)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('emits correctly shaped frames at the natural (realtime) cadence', async () => {
+    const source = new FileAudioSource(validWavPath) // realtime defaults to true
+    const frames: AudioFrame[] = []
+    source.on('audio', (f) => frames.push(f))
+
+    await source.start()
+    await vi.advanceTimersByTimeAsync(FRAME_COUNT * FRAME_MS)
+    await source.stop()
+
+    expect(frames.length).toBe(FRAME_COUNT)
+    for (const f of frames) {
+      expect(f.pcm).toBeInstanceOf(Float32Array)
+      for (const sample of f.pcm) {
+        expect(Number.isFinite(sample)).toBe(true)
+      }
+      expect(typeof f.t).toBe('number')
+      expect(Number.isFinite(f.t)).toBe(true)
+    }
+  })
+
+  it('assigns t as an arithmetic sequence, FRAME_MS apart, at realtime cadence', async () => {
+    const source = new FileAudioSource(validWavPath, { realtime: true })
+    const timestamps: number[] = []
+    source.on('audio', (f) => timestamps.push(f.t))
+
+    await source.start()
+    await vi.advanceTimersByTimeAsync(FRAME_COUNT * FRAME_MS)
+    await source.stop()
+
+    expect(timestamps).toEqual([0, FRAME_MS, 2 * FRAME_MS])
+  })
+
+  it('emits "end" exactly once at realtime cadence', async () => {
+    const source = new FileAudioSource(validWavPath, { realtime: true })
+    let endCount = 0
+    source.on('end', () => {
+      endCount++
+    })
+
+    await source.start()
+    await vi.advanceTimersByTimeAsync(FRAME_COUNT * FRAME_MS + FRAME_MS)
+    await source.stop()
+
+    expect(endCount).toBe(1)
+  })
+
+  it('stop() racing an in-flight realtime drive cuts off remaining frames', async () => {
+    const control = new FileAudioSource(validWavPath, { realtime: true })
+    const controlFrames: AudioFrame[] = []
+    control.on('audio', (f) => controlFrames.push(f))
+    await control.start()
+    await vi.advanceTimersByTimeAsync(FRAME_COUNT * FRAME_MS)
+    await control.stop()
+
+    const subject = new FileAudioSource(validWavPath, { realtime: true })
+    const subjectFrames: AudioFrame[] = []
+    subject.on('audio', (f) => subjectFrames.push(f))
+    await subject.start() // frame 0 emitted synchronously
+    await subject.stop() // must cut off before the next scheduled setTimeout fires
+    await vi.advanceTimersByTimeAsync(FRAME_COUNT * FRAME_MS)
+
+    expect(subjectFrames.length).toBeLessThan(controlFrames.length)
   })
 })

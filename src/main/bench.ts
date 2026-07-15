@@ -7,7 +7,6 @@ import { Playbook } from '../pipeline/playbook'
 import { SherpaStt } from '../pipeline/stt'
 import { TranscriptState } from '../pipeline/transcript-state'
 import { SileroVad } from '../pipeline/vad'
-import { parseWav, toFrames, toMono16k } from '../pipeline/wav'
 import { checkModels, paths, playbookPath } from './config'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
 
@@ -34,11 +33,7 @@ export async function runBench(wav: string | undefined): Promise<void> {
     return
   }
 
-  const mono = toMono16k(parseWav(readFileSync(wav)))
-  const frames = toFrames(mono)
-  console.log(
-    `bench: ${wav} -> ${frames.length} frames (${(frames.length * FRAME_MS) / 1000}s @16k mono)`
-  )
+  console.log(`bench: ${wav} -> streaming frames at natural cadence (~${FRAME_MS}ms/frame)`)
 
   const llm = new LlamaClient(paths.llamaBase)
   if (!(await llm.health())) {
@@ -84,8 +79,12 @@ export async function runBench(wav: string | undefined): Promise<void> {
 
   // Frames are supplied by `FileAudioSource` (via the pure `streamFrames`
   // wrapper) at their natural 32ms cadence, so the 200ms debounce and the
-  // llama slot behave the way they would on a live call.
+  // llama slot behave the way they would on a live call. Counted here (as
+  // they're consumed) rather than via a separate upfront wav parse, so the
+  // file is only ever parsed once (inside `FileAudioSource`).
+  let frameCount = 0
   for await (const frame of streamFrames(wav, { realtime: true })) {
+    frameCount++
     const t0 = now()
     const ev = await vad.accept(frame.pcm)
     samples.vad.push(now() - t0)
@@ -103,6 +102,9 @@ export async function runBench(wav: string | undefined): Promise<void> {
       engine.onTurnEnd('THEM', await stt.finish())
     }
   }
+  console.log(
+    `bench: processed ${frameCount} frames (${(frameCount * FRAME_MS) / 1000}s @16k mono)`
+  )
 
   // Let the last in-flight speculation land.
   await delay(500)
