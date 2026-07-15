@@ -3,7 +3,8 @@ import {
   canStartCapture,
   CONSENT_ANNOUNCEMENT_PLACEHOLDER,
   ConsentGate,
-  resolveAnnouncement
+  resolveAnnouncement,
+  wireCaptureStart
 } from '../src/main/consent'
 
 // Transport-B procedural consent gate (spec.md §4 item 2 / Plans.md Task 4.1):
@@ -75,6 +76,75 @@ describe('ConsentGate', () => {
     const second = gate.affirm()
     expect(second).toEqual(first)
     expect(writer).toHaveBeenCalledTimes(1)
+  })
+
+  it('propagates a write failure and stays pending — a failed log must never silently start capture', () => {
+    const writer = vi.fn(() => {
+      throw new Error('disk full')
+    })
+    const gate = new ConsentGate({ writer })
+    const cb = vi.fn()
+    gate.onAffirmed(cb)
+
+    expect(() => gate.affirm()).toThrow('disk full')
+    expect(gate.state).toBe('pending')
+    expect(cb).not.toHaveBeenCalled()
+  })
+
+  it('allows a retry after a failed affirm() — a subsequent successful write does affirm', () => {
+    let shouldFail = true
+    const writer = vi.fn(() => {
+      if (shouldFail) throw new Error('disk full')
+    })
+    const gate = new ConsentGate({ writer, now: () => new Date('2026-07-15T12:00:00.000Z') })
+
+    expect(() => gate.affirm()).toThrow('disk full')
+    expect(gate.state).toBe('pending')
+
+    shouldFail = false
+    const record = gate.affirm()
+    expect(gate.state).toBe('affirmed')
+    expect(record).toEqual({ affirmedAt: '2026-07-15T12:00:00.000Z', session: expect.any(String) })
+    expect(writer).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('wireCaptureStart', () => {
+  it('does not call start() before affirm() — only registers for later', () => {
+    const gate = new ConsentGate({ writer: vi.fn() })
+    const start = vi.fn()
+    const log = vi.fn()
+
+    wireCaptureStart(gate, start, log)
+
+    expect(start).not.toHaveBeenCalled()
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('awaiting operator consent affirmation')
+    )
+  })
+
+  it('calls start() exactly once after affirm() fires', () => {
+    const gate = new ConsentGate({ writer: vi.fn() })
+    const start = vi.fn()
+    const log = vi.fn()
+
+    wireCaptureStart(gate, start, log)
+    expect(start).not.toHaveBeenCalled()
+
+    gate.affirm()
+    expect(start).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls start() immediately when the gate is already affirmed', () => {
+    const gate = new ConsentGate({ writer: vi.fn() })
+    gate.affirm()
+    const start = vi.fn()
+    const log = vi.fn()
+
+    wireCaptureStart(gate, start, log)
+
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('already affirmed'))
   })
 })
 

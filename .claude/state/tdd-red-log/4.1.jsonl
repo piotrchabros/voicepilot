@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-15T16:56:50Z","task_id":"4.1","test_file":"test/consent.test.ts","exit_code":1,"framework":"vitest","stderr_tail":"Failed to load url ../src/main/consent — does the file exist?","cwd_hash":"efe18e889192"}
+{"timestamp":"2026-07-15T16:56:50Z","task_id":"4.1","test_file":"test/consent-view.test.ts","exit_code":1,"framework":"vitest","stderr_tail":"Failed to load url ../src/renderer/consent-view — does the file exist?","cwd_hash":"efe18e889192"}
