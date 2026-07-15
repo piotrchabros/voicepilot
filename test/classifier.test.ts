@@ -129,6 +129,25 @@ describe('classifyTurn (spec.md §3 Tier-1 PL rules)', () => {
       const c = classifyTurn('nie jest wcale za drogie')
       expect(c.label).not.toBe('price_objection')
     })
+
+    // Pin the residual cross-label trigram score numerically: this text
+    // scores non-zero against an unrelated label's trigrams (noise from
+    // shared "nie ..." grams) even after the negation guard zeroes out its
+    // own label. If CLEAN_THRESHOLD ever creeps down toward this value, this
+    // fixture fails loudly instead of the guard silently eroding.
+    it('the negated-sentence residual score stays below CLEAN_THRESHOLD (pinned)', () => {
+      const c = classifyTurn('nie jest wcale za drogie')
+      expect(c.label).toBe('none')
+      expect(c.confidence).toBeCloseTo(0.3846153846153847, 10)
+    })
+
+    // Regression: the negation guard's clause-boundary handling must not
+    // over-reach past a contrastive conjunction ("ale") into an unrelated
+    // earlier clause. "nie wiem" here negates nothing about the speaker's
+    // decision-making authority — the clause after "ale" is what matters.
+    it('does not let an unrelated "nie" in an earlier clause cancel a match after "ale"', () => {
+      expect(classifyTurn('nie wiem, ale to nie moja decyzja').label).toBe('authority_objection')
+    })
   })
 
   describe('stalling vs. commitment ("bierzemy to")', () => {

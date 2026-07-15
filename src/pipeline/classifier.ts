@@ -253,12 +253,36 @@ function cosine(a: Map<string, number>, an: number, b: Map<string, number>, bn: 
   return dot / (an * bn)
 }
 
+/**
+ * Lightweight negation guard vocabulary (declared before COMPILED_PHRASES,
+ * which needs NEGATION_WORDS to precompute `selfNegating`): a phrase match
+ * is discarded if one of the NEGATION_WORDS appears within
+ * NEGATION_LOOKBACK tokens immediately before the match, WITHOUT crossing a
+ * clause boundary — a comma/period/question mark/exclamation mark, or a
+ * contrastive conjunction (ale/lecz/jednak/wiec), ends the lookback window.
+ * This keeps an unrelated negation in an earlier clause ("nie wiem, ale to
+ * nie moja decyzja") from cancelling a match in the current one. Only
+ * applied to exact-substring matches, where the match start index is known;
+ * phrases that are themselves self-negating (see `CompiledPhrase.selfNegating`
+ * below) skip this check entirely.
+ */
+const NEGATION_WORDS = new Set(['nie', 'wcale'])
+const NEGATION_LOOKBACK = 3
+const CLAUSE_BOUNDARY_PUNCT = /[,.?!]/
+const CLAUSE_BOUNDARY_WORDS = new Set(['ale', 'lecz', 'jednak', 'wiec'])
+
 interface CompiledPhrase {
   readonly label: Exclude<TriggerLabel, 'none'>
   readonly normalizedPhrase: string
   readonly length: number
   readonly grams: Map<string, number>
   readonly gramsNorm: number
+  /** True when the phrase itself already contains a negation word (e.g.
+   * "nie teraz", "to nie moja decyzja"). Such phrases are their OWN negation
+   * and must never be run through `isNegated` — there is nothing further to
+   * negate, and checking would only risk an unrelated "nie"/"wcale" earlier
+   * in a different clause incorrectly cancelling a legitimate match. */
+  readonly selfNegating: boolean
 }
 
 /**
@@ -271,32 +295,38 @@ const COMPILED_PHRASES: readonly CompiledPhrase[] = RULES.flatMap((rule) =>
   rule.phrases.map((phrase) => {
     const normalizedPhrase = normalize(phrase)
     const grams = trigrams(phrase)
+    const phraseTokens = normalizedPhrase.split(/\s+/).filter(Boolean)
     return {
       label: rule.label,
       normalizedPhrase,
       length: normalizedPhrase.length,
       grams,
-      gramsNorm: normOf(grams)
+      gramsNorm: normOf(grams),
+      selfNegating: phraseTokens.some((t) => NEGATION_WORDS.has(t))
     }
   })
 )
 
-/**
- * Lightweight negation guard: a phrase match is discarded if one of the
- * NEGATION_WORDS appears within NEGATION_LOOKBACK tokens immediately before
- * the match (e.g. "nie jest wcale za drogie" must not fire price_objection).
- * Only applied to exact-substring matches, where the match start index is
- * known; phrases that legitimately start with a negation word themselves
- * (e.g. "nie teraz", "nie stac nas") are unaffected because the check only
- * looks at tokens strictly BEFORE the match, never inside it.
- */
-const NEGATION_WORDS = new Set(['nie', 'wcale'])
-const NEGATION_LOOKBACK = 3
-
 function isNegated(normalizedText: string, matchIndex: number): boolean {
-  const before = normalizedText.slice(0, matchIndex).split(/\s+/).filter(Boolean)
-  const window = before.slice(-NEGATION_LOOKBACK)
-  return window.some((token) => NEGATION_WORDS.has(token))
+  const tokens = normalizedText.slice(0, matchIndex).split(/\s+/).filter(Boolean)
+
+  // Find the start of the current clause: scan backward from the match and
+  // stop at the nearest boundary (punctuation attached to a token, or a
+  // contrastive conjunction token) — negation words before that boundary
+  // belong to a different clause and must not count.
+  let clauseStart = 0
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const raw = tokens[i]
+    if (raw === undefined) continue
+    const bare = raw.replace(/[,.?!]/g, '')
+    if (CLAUSE_BOUNDARY_PUNCT.test(raw) || CLAUSE_BOUNDARY_WORDS.has(bare)) {
+      clauseStart = i + 1
+      break
+    }
+  }
+
+  const window = tokens.slice(clauseStart).slice(-NEGATION_LOOKBACK)
+  return window.some((token) => NEGATION_WORDS.has(token.replace(/[,.?!]/g, '')))
 }
 
 /** Tie-break rule: strictly higher score wins; on an exact tie, the longer
@@ -330,6 +360,7 @@ export function classifyTurn(text: string, opts?: ClassifyOpts): Classification 
   // slightly different wording of the very same phrase.
   const negatedLabels = new Set<Exclude<TriggerLabel, 'none'>>()
   for (const compiled of COMPILED_PHRASES) {
+    if (compiled.selfNegating) continue
     const matchIndex = normalizedText.indexOf(compiled.normalizedPhrase)
     if (matchIndex !== -1 && isNegated(normalizedText, matchIndex)) {
       negatedLabels.add(compiled.label)
@@ -346,7 +377,9 @@ export function classifyTurn(text: string, opts?: ClassifyOpts): Classification 
     if (matchIndex !== -1) {
       // Exact substring match on folded text is a strong, cheap signal
       // (handles verbatim/near-verbatim PL objections) — unless negated.
-      score = isNegated(normalizedText, matchIndex) ? 0 : 1
+      // Self-negating phrases (e.g. "nie teraz") are never run through the
+      // guard: they carry their own negation already.
+      score = !compiled.selfNegating && isNegated(normalizedText, matchIndex) ? 0 : 1
     } else if (negatedLabels.has(compiled.label)) {
       score = 0
     } else {
