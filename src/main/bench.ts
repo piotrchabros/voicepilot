@@ -1,23 +1,35 @@
+import type { SuggestionTiming } from '@shared/types'
 import { FRAME_MS } from '@shared/types'
 import { streamFrames } from '../pipeline/frame-stream'
 import { HintEngine } from '../pipeline/hint-engine'
 import { LlamaClient } from '../pipeline/llama-client'
 import { Playbook } from '../pipeline/playbook'
 import { SherpaStt } from '../pipeline/stt'
+import { StageClock, stageDeltas } from '../pipeline/timing'
 import { TranscriptState } from '../pipeline/transcript-state'
 import { SileroVad } from '../pipeline/vad'
 import { checkModels, paths, playbookDir } from './config'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
 
 // `--bench <wav>`: replay a wav through the pipeline and print p50/p95 for each
-// stage boundary. This is how the port gets validated — everything else is
+// stage boundary, aggregated from Hint.timing (Task 3.3 — same StageClock the
+// live pipeline uses, transport tagged 'file' here since this replays via
+// FileAudioSource). This is how the port gets validated — everything else is
 // unverifiable without a real call.
 //
 // Frames are fed at their natural 32ms cadence so the 200ms debounce and the
 // llama slot behave the way they would on a live call. A 20s wav takes ~20s.
 
-const STAGES = ['vad', 'stt', 'speculate', 'ttft', 'paint'] as const
-type Stage = (typeof STAGES)[number]
+/** Ordered (label, printed heading) pairs — same order/labels as the original
+ *  bench report, so existing output consumers see an unchanged table shape
+ *  plus one new trailing column. */
+const STAGE_ROWS: readonly (readonly [string, string])[] = [
+  ['frame_in->vad_out', 'frame_in -> vad_out'],
+  ['vad_out->stt_interim', 'vad_out -> stt_interim'],
+  ['stt_interim->speculate_fired', 'stt_interim -> speculate'],
+  ['speculate_fired->first_token', 'speculate -> first_token'],
+  ['first_token->painted', 'first_token -> painted']
+]
 
 export async function runBench(wav: string | undefined): Promise<void> {
   if (wav === undefined) {
@@ -43,31 +55,25 @@ export async function runBench(wav: string | undefined): Promise<void> {
 
   const playbook = loadPlaybook()
   const state = new TranscriptState(SYSTEM_PROMPT, STATIC_CONTEXT, MAX_TURNS)
-  const samples: Record<Stage, number[]> = { vad: [], stt: [], speculate: [], ttft: [], paint: [] }
-
-  // Per-speculation correlation timestamps.
-  let lastInterimAt = 0
-  let specAt = 0
-  let firstTokenAt = 0
-  let awaitingFirstToken = false
+  const clock = new StageClock()
+  const timings: SuggestionTiming[] = []
   let awaitingPaint = false
 
-  const engine = new HintEngine(llm, playbook, state, (hint) => {
-    if (hint.source === 'GENERATED' && awaitingPaint) {
-      samples.paint.push(now() - firstTokenAt)
-      awaitingPaint = false
-    }
-  })
-  engine.onSpeculate = () => {
-    specAt = now()
-    samples.speculate.push(specAt - lastInterimAt)
-    awaitingFirstToken = true
-  }
+  const engine = new HintEngine(
+    llm,
+    playbook,
+    state,
+    (hint) => {
+      if (hint.source === 'GENERATED' && awaitingPaint) {
+        clock.mark('painted')
+        const snap = clock.snapshot()
+        if (snap !== null) timings.push(snap)
+        awaitingPaint = false
+      }
+    },
+    clock
+  )
   engine.onFirstToken = () => {
-    if (!awaitingFirstToken) return
-    firstTokenAt = now()
-    samples.ttft.push(firstTokenAt - specAt)
-    awaitingFirstToken = false
     awaitingPaint = true
   }
 
@@ -84,17 +90,15 @@ export async function runBench(wav: string | undefined): Promise<void> {
   let frameCount = 0
   for await (const frame of streamFrames(wav, { realtime: true })) {
     frameCount++
-    const t0 = now()
+    clock.beginTurn('file')
     const ev = await vad.accept(frame.pcm)
-    samples.vad.push(now() - t0)
+    clock.mark('vad_out')
 
     if (ev === 'SPEECH_START' || ev === 'SPEECH') {
-      const t1 = now()
       stt.accept(frame.pcm)
       const interim = stt.interim()
-      samples.stt.push(now() - t1)
+      clock.mark('stt_interim')
       state.live('THEM', interim)
-      lastInterimAt = now()
       engine.onTranscriptUpdate()
     } else if (ev === 'TURN_END') {
       stt.accept(frame.pcm)
@@ -110,29 +114,35 @@ export async function runBench(wav: string | undefined): Promise<void> {
   engine.shutdown()
   stt.close()
 
-  report(samples)
+  report(timings)
 }
 
 function loadPlaybook(): Playbook {
   return Playbook.load(playbookDir())
 }
 
-function report(samples: Record<Stage, number[]>): void {
-  console.log('\nstage boundary        n     p50(ms)   p95(ms)')
-  console.log('----------------------------------------------')
-  const labels: Record<Stage, string> = {
-    vad: 'frame_in -> vad_out',
-    stt: 'vad_out -> stt_interim',
-    speculate: 'stt_interim -> speculate',
-    ttft: 'speculate -> first_token',
-    paint: 'first_token -> painted'
+/** Pure aggregation + print: exported so it can be unit-tested with fixture
+ *  `SuggestionTiming[]` instead of a real model/wav run. */
+export function report(timings: readonly SuggestionTiming[]): void {
+  console.log('\nstage boundary        n     p50(ms)   p95(ms)   transport')
+  console.log('---------------------------------------------------------')
+  const buckets = new Map<string, number[]>()
+  const transports = new Set<string>()
+  for (const timing of timings) {
+    transports.add(timing.transport)
+    for (const delta of stageDeltas(timing)) {
+      const arr = buckets.get(delta.label) ?? []
+      arr.push(delta.ms)
+      buckets.set(delta.label, arr)
+    }
   }
-  for (const stage of STAGES) {
-    const xs = samples[stage]
+  const transportTag = transports.size === 0 ? '—' : [...transports].sort().join(',')
+  for (const [label, heading] of STAGE_ROWS) {
+    const xs = buckets.get(label) ?? []
     const p50 = pct(xs, 50)
     const p95 = pct(xs, 95)
     console.log(
-      `${labels[stage].padEnd(24)}${String(xs.length).padStart(4)}   ${fmt(p50).padStart(8)}  ${fmt(p95).padStart(8)}`
+      `${heading.padEnd(24)}${String(xs.length).padStart(4)}   ${fmt(p50).padStart(8)}  ${fmt(p95).padStart(8)}   ${transportTag}`
     )
   }
 }
@@ -146,10 +156,6 @@ function pct(xs: number[], p: number): number | null {
 
 function fmt(x: number | null): string {
   return x === null ? '—' : x.toFixed(1)
-}
-
-function now(): number {
-  return performance.now()
 }
 
 function delay(ms: number): Promise<void> {

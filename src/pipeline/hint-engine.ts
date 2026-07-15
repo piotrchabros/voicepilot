@@ -1,6 +1,7 @@
 import type { Hint, Speaker } from '@shared/types'
 import type { Generation, StreamOptions } from './llama-client'
 import type { Playbook } from './playbook'
+import type { StageClock } from './timing'
 import type { TranscriptState } from './transcript-state'
 
 /**
@@ -34,6 +35,7 @@ export class HintEngine {
   private readonly playbook: Playbook
   private readonly state: TranscriptState
   private readonly sink: (hint: Hint) => void
+  private readonly clock: StageClock | null
 
   private pending: ReturnType<typeof setTimeout> | null = null
   private inFlight: Generation | null = null
@@ -44,16 +46,32 @@ export class HintEngine {
   /** Fired on the first generated token of a speculation — for the bench. */
   onFirstToken?: () => void
 
+  /**
+   * `clock` is optional (Task 3.3): when supplied, every hint passed to
+   * `sink` gets a `timing` snapshot attached, and speculate_fired/first_token
+   * get marked on it as they happen. Omitting it (default) is the original,
+   * uninstrumented behavior — existing callers/tests are unaffected.
+   */
   constructor(
     llm: HintLlm,
     playbook: Playbook,
     state: TranscriptState,
-    sink: (hint: Hint) => void
+    sink: (hint: Hint) => void,
+    clock?: StageClock
   ) {
     this.llm = llm
     this.playbook = playbook
     this.state = state
     this.sink = sink
+    this.clock = clock ?? null
+  }
+
+  /** Attaches the current clock snapshot (if any) before handing the hint to
+   *  the real sink. All hint emission — retrieval and generation — goes
+   *  through here so timing coverage doesn't depend on the caller remembering. */
+  private sinkHint(hint: Hint): void {
+    const timing = this.clock?.snapshot() ?? undefined
+    this.sink(timing !== undefined ? { ...hint, timing } : hint)
   }
 
   /**
@@ -65,7 +83,8 @@ export class HintEngine {
     const key = this.state.retrievalKey()
     if (key.length > 12) {
       const play = this.playbook.nearestPlay(key)
-      if (play !== null) this.sink({ text: `${play.headline} — ${play.line}`, source: 'RETRIEVED' })
+      if (play !== null)
+        this.sinkHint({ text: `${play.headline} — ${play.line}`, source: 'RETRIEVED' })
     }
 
     // Layer 2: debounced speculation.
@@ -87,6 +106,7 @@ export class HintEngine {
     if (this.inFlight !== null) this.inFlight.cancel()
 
     let acc = ''
+    this.clock?.mark('speculate_fired')
     this.onSpeculate?.()
     const gen = this.llm.streamHint(
       prompt,
@@ -94,9 +114,14 @@ export class HintEngine {
         acc += tok
         const text = acc.trim()
         // Whitespace-only accumulations are noise, not a hint — don't paint them.
-        if (text.length > 0) this.sink({ text, source: 'GENERATED' })
+        if (text.length > 0) this.sinkHint({ text, source: 'GENERATED' })
       },
-      { onFirstToken: () => this.onFirstToken?.() }
+      {
+        onFirstToken: () => {
+          this.clock?.mark('first_token')
+          this.onFirstToken?.()
+        }
+      }
     )
     this.inFlight = gen
 

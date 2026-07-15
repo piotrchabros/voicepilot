@@ -26,9 +26,23 @@ export const RECORD_BYTES = 1 + FRAME_SAMPLES * 4 // 2049
 
 export type HintSource = 'RETRIEVED' | 'GENERATED'
 
+/** Which transport produced this suggestion — spec.md §3: "per-stage timestamps
+ *  tagged with transport on every suggestion". */
+export type SuggestionTransport = 'system' | 'file' | 'twilio'
+
+/** Per-stage latency timestamps for one suggestion, relative to `frame_in`
+ *  (matches MetricMsg.ms's existing "relative to frame_in" contract below). */
+export interface SuggestionTiming {
+  readonly transport: SuggestionTransport
+  readonly stages: Partial<Record<BenchStage, number>>
+}
+
 export interface Hint {
   readonly text: string
   readonly source: HintSource
+  /** Optional: attached when the producer wires a StageClock (pipeline/timing.ts).
+   *  Absent means no instrumentation was configured — non-breaking wire shape. */
+  readonly timing?: SuggestionTiming
 }
 
 // ---- main <-> pipeline (utilityProcess) --------------------------------------

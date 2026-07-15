@@ -22,6 +22,7 @@ import { Playbook } from './playbook'
 import { SherpaStt } from './stt'
 import type { SttEngine } from './stt-engine'
 import { SonioxStt } from './stt-soniox'
+import { StageClock } from './timing'
 import { TranscriptState } from './transcript-state'
 import { SileroVad } from './vad'
 
@@ -98,17 +99,31 @@ const legs = new Map<Leg, LegRuntime>()
 const echoDetector = new EchoDetector()
 let echoWarned = false
 
+// Shared per-suggestion latency clock (spec.md §3, Task 3.3). This is the
+// live SystemAudioSource pipeline, so transport is always 'system' here.
+// `beginTurn` restarts on every THEM speech frame — debounce cancel-previous
+// means there is only ever one "live" pending speculation, and it always
+// belongs to the most recently marked frame, so this stays consistent with
+// what actually fires.
+const clock = new StageClock()
+
 async function init(cfg: InitMsg): Promise<void> {
   try {
     const playbook = Playbook.fromYaml(cfg.playbookYaml)
     state = new TranscriptState(`${cfg.systemPrompt}`, cfg.staticContext, cfg.maxTurns)
     const llm = new LlamaClient(cfg.llamaBase)
 
-    engine = new HintEngine(llm, playbook, state, (hint) => {
-      const hintLog = formatHintLog(hint, DEBUG)
-      if (hintLog !== null) log('info', hintLog)
-      send({ type: 'hint', hint })
-    })
+    engine = new HintEngine(
+      llm,
+      playbook,
+      state,
+      (hint) => {
+        const hintLog = formatHintLog(hint, DEBUG)
+        if (hintLog !== null) log('info', hintLog)
+        send({ type: 'hint', hint })
+      },
+      clock
+    )
 
     // One VAD + STT per leg. Mic = ME, system = THEM. Soniox (cloud, Polish)
     // when a key is configured; local English zipformer otherwise.
@@ -177,7 +192,12 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
     log('warn', 'headset check: mic/loopback correlation high — use a headset')
   }
 
+  // Only THEM triggers speculation (see below), so only THEM frames are worth
+  // instrumenting — marking mic frames would just get overwritten/discarded.
+  const isThem = leg.who === 'THEM'
+  if (isThem) clock.beginTurn('system')
   const ev = await leg.vad.accept(samples)
+  if (isThem) clock.mark('vad_out')
 
   if (DEBUG) {
     leg.rx++
@@ -206,6 +226,7 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
     case 'SPEECH': {
       leg.stt.accept(samples)
       state.live(leg.who, leg.stt.interim())
+      if (isThem) clock.mark('stt_interim')
       // Only speculate on THEIR speech. Hinting at yourself mid-sentence is just
       // distracting. (In COPILOT_MIC_SPECULATE test mode the mic leg IS 'THEM'.)
       if (leg.who === 'THEM') engine.onTranscriptUpdate()

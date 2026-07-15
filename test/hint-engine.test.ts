@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Hint } from '@shared/types'
 import { DEBOUNCE_MS, HintEngine, type HintLlm } from '../src/pipeline/hint-engine'
-import type { Generation } from '../src/pipeline/llama-client'
+import type { Generation, StreamOptions } from '../src/pipeline/llama-client'
 import { Playbook } from '../src/pipeline/playbook'
+import { StageClock } from '../src/pipeline/timing'
 import { TranscriptState } from '../src/pipeline/transcript-state'
 
 const YAML = `
@@ -25,10 +26,13 @@ interface Rec {
 class StubLlm implements HintLlm {
   readonly gens: Rec[] = []
   nextTokens: string[][] = []
-  streamHint(prompt: string, onToken: (tok: string) => void): Generation {
+  streamHint(prompt: string, onToken: (tok: string) => void, opts: StreamOptions = {}): Generation {
     const rec: Rec = { prompt, cancelled: false }
     this.gens.push(rec)
-    for (const tok of this.nextTokens.shift() ?? []) onToken(tok)
+    const toks = this.nextTokens.shift() ?? []
+    // Matches real LlamaClient: onFirstToken fires once, before the first token lands.
+    if (toks.length > 0) opts.onFirstToken?.()
+    for (const tok of toks) onToken(tok)
     return {
       cancel: () => {
         rec.cancelled = true
@@ -129,5 +133,45 @@ describe('HintEngine cancel-previous (the design, not a bug)', () => {
     vi.advanceTimersByTime(DEBOUNCE_MS)
     engine.shutdown()
     expect(llm.gens[0]?.cancelled).toBe(true)
+  })
+})
+
+describe('HintEngine optional StageClock integration (Task 3.3)', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('with no clock supplied, hints carry no timing (unchanged existing behavior)', () => {
+    const llm = new StubLlm()
+    const playbook = Playbook.parse(TSV)
+    const state = new TranscriptState('sys', 'pb', 12)
+    const hints: Hint[] = []
+    const engine = new HintEngine(llm, playbook, state, (h) => hints.push(h))
+    state.live('THEM', 'to jest za drogo dla nas')
+    engine.onTranscriptUpdate()
+    expect(hints[0]?.timing).toBeUndefined()
+  })
+
+  it('when a clock is supplied, every sinked hint carries a timing snapshot with the marked stages', () => {
+    const llm = new StubLlm()
+    llm.nextTokens = [['Zapytaj', ' o budzet']]
+    const playbook = Playbook.parse(TSV)
+    const state = new TranscriptState('sys', 'pb', 12)
+    const hints: Hint[] = []
+    const clock = new StageClock(() => tick++)
+    let tick = 0
+    const engine = new HintEngine(llm, playbook, state, (h) => hints.push(h), clock)
+
+    clock.beginTurn('system')
+    clock.mark('vad_out')
+    clock.mark('stt_interim')
+    state.live('THEM', 'nie mamy na to budzetu w tym roku')
+    engine.onTranscriptUpdate()
+    vi.advanceTimersByTime(DEBOUNCE_MS)
+
+    const generated = hints.find((h) => h.source === 'GENERATED')
+    expect(generated?.timing?.transport).toBe('system')
+    expect(generated?.timing?.stages.frame_in).toBe(0)
+    expect(generated?.timing?.stages.speculate_fired).toBeDefined()
+    expect(generated?.timing?.stages.first_token).toBeDefined()
   })
 })
