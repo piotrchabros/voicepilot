@@ -120,6 +120,11 @@ export class SonioxStt implements SttEngine {
   private open = false
   private connecting = false
   private closedForever = false
+  /** Set right before an intentional close (hangup()/close()) or once the
+   *  disconnect has already been reported via the 'error' handler — so the
+   *  'close' handler doesn't also fire a duplicate/false health event for an
+   *  ordinary idle hangup or app-shutdown close (spec.md Task 2.4). */
+  private expectingQuietClose = false
   private readonly tracker = new TokenTracker()
   /** Frames buffered while the socket is (re)connecting. */
   private backlog: Buffer[] = []
@@ -177,7 +182,12 @@ export class SonioxStt implements SttEngine {
         return
       }
       if (res.error_code !== undefined) {
-        this.log('warn', `${res.error_code}: ${res.error_message ?? ''}`)
+        // Protocol-level error (server accepted the connection but rejected
+        // the stream/audio) — never surfaces as a ws 'error' or 'close', so it
+        // needs its own health report or it silently stays in the log only.
+        const detail = `${res.error_code}: ${res.error_message ?? ''}`
+        this.log('warn', detail)
+        this.opts.onHealth?.(false, detail)
         return
       }
       if (res.tokens !== undefined) this.tracker.onTokens(res.tokens)
@@ -187,14 +197,29 @@ export class SonioxStt implements SttEngine {
       const detail = `ws error: ${err.message}`
       this.log('warn', detail)
       this.opts.onHealth?.(false, detail)
+      // The 'close' event fires right after 'error' for the same disconnect —
+      // don't double-report it.
+      this.expectingQuietClose = true
     })
 
-    ws.on('close', () => {
+    ws.on('close', (code: number) => {
       // No eager reconnect: the next speech frame reconnects lazily, and the
       // backlog holds it in the meantime. Keeps billing bounded to speech.
+      const quiet = this.expectingQuietClose
+      this.expectingQuietClose = false
       this.open = false
       this.connecting = false
       this.ws = null
+      // A server-initiated close with no preceding 'error' (e.g. idle
+      // timeout, a proxy killing the connection) is a real disconnect the
+      // caller never heard about otherwise — but an intentional hangup()
+      // (lazy idle close) or close() (app shutdown) is expected, not a
+      // failure, so `quiet` suppresses those.
+      if (!quiet) {
+        const detail = `ws closed: ${code}`
+        this.log('warn', detail)
+        this.opts.onHealth?.(false, detail)
+      }
     })
   }
 
@@ -214,6 +239,7 @@ export class SonioxStt implements SttEngine {
   }
 
   private hangup(): void {
+    this.expectingQuietClose = true
     if (this.ws !== null) {
       try {
         this.ws.send(Buffer.alloc(0)) // graceful end-of-session

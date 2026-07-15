@@ -3,6 +3,9 @@ import type { HealthMsg } from '@shared/types'
 // Pure conversions from the two SystemAudioSource event shapes into the wire
 // HealthMsg the overlay understands. Kept out of pipeline-host.ts (which
 // imports electron) so these can be unit-tested directly (spec.md Task 2.4).
+// The remaining pipeline-host.ts wiring hop (audioSource.on(...) -> deps.onHealth)
+// is electron-only glue with no branching logic — covered by Task 4.2's manual
+// QA checklist, not a unit test here.
 
 /** SystemAudioSource's own 'health' event shape (see system-audio-source.ts). */
 export interface AudioHealthStatus {

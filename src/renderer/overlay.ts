@@ -30,6 +30,10 @@ function render(hint: Hint): void {
   pill.classList.toggle('visible', text.length > 0 && text !== '-')
 }
 
+// The visible/text decision itself is pure (bannerStateFor, unit-tested
+// without jsdom); the DOM writes and the auto-dismiss timer below are the one
+// part of this file that isn't — they're covered by Task 4.2's manual QA
+// checklist instead.
 function renderHealth(health: HealthMsg): void {
   if (healthTimer !== null) {
     clearTimeout(healthTimer)
