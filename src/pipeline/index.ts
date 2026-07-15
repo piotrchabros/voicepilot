@@ -13,6 +13,7 @@ import {
   speakerOf,
   type ToPipeline
 } from '@shared/types'
+import { classifyTurn } from './classifier'
 import { HintEngine } from './hint-engine'
 import { LlamaClient } from './llama-client'
 import { Playbook } from './playbook'
@@ -51,6 +52,19 @@ export function formatTurnEndLog(who: Speaker, finalText: string, debug: boolean
 
 export function formatHintLog(hint: Hint, debug: boolean): string | null {
   return debug ? `hint[${hint.source}] "${hint.text}"` : null
+}
+
+// Tier-1 classification (spec.md §3): gate + telemetry label on settled THEM
+// turns, never the trigger for painting a card (that stays speculative).
+// Log hygiene (spec.md §4.4): only the label + confidence go to the log line
+// itself; the transcript text is a separate, already-gated call (see
+// formatTurnEndLog above) and must never be folded into this string.
+export function formatClassificationLog(
+  label: string,
+  confidence: number,
+  debug: boolean
+): string | null {
+  return debug ? `classify[THEM] label=${label} confidence=${confidence.toFixed(2)}` : null
 }
 
 interface LegRuntime {
@@ -176,6 +190,17 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
       const finalText = await leg.stt.finish()
       const turnEndLog = formatTurnEndLog(leg.who, finalText, DEBUG)
       if (turnEndLog !== null) log('info', turnEndLog)
+      // Tier-1 classification runs on settled prospect (THEM) turns only —
+      // it is a gate + telemetry label, not a suggestion trigger (spec.md §3).
+      if (leg.who === 'THEM') {
+        const classification = classifyTurn(finalText)
+        const classificationLog = formatClassificationLog(
+          classification.label,
+          classification.confidence,
+          DEBUG
+        )
+        if (classificationLog !== null) log('info', classificationLog)
+      }
       engine.onTurnEnd(leg.who, finalText)
       break
     }
