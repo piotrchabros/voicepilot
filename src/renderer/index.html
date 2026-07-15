@@ -8,10 +8,12 @@
   </head>
   <body>
     <!--
-      The entire UI. One text node. Three words max. Big. Bottom-centre.
-      Dim for RETRIEVED (a guess), bright for GENERATED (earned it).
-      No framework — a framework here is pure overhead.
+      The core UI: one hint text node (Big. Bottom-centre. Dim for RETRIEVED,
+      bright for GENERATED) plus a small health banner pill (top, red, shown
+      only on ok:false — sidecar exit / device loss / Soniox disconnect;
+      spec.md Task 2.4). No framework — a framework here is pure overhead.
     -->
+    <div id="health-pill"><span id="health"></span></div>
     <div id="pill"><span id="hint"></span></div>
     <script type="module" src="./overlay.ts"></script>
   </body>

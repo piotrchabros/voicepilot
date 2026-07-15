@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
-import type { Hint } from '@shared/types'
+import type { HealthMsg, Hint } from '@shared/types'
 import { loadEnv } from './env'
 import { startPipeline, type PipelineHandle } from './pipeline-host'
 import { runListDevices } from './list-devices'
@@ -90,6 +90,10 @@ function paint(hint: Hint): void {
   overlay?.webContents.send('hint', hint)
 }
 
+function paintHealth(health: HealthMsg): void {
+  overlay?.webContents.send('health', health)
+}
+
 // --- CLI subcommands (do not launch the overlay) ------------------------------
 
 const argv = process.argv.slice(app.isPackaged ? 1 : 2)
@@ -132,7 +136,8 @@ if (argv.includes('--list-devices')) {
 
     pipeline = startPipeline({
       onHint: paint,
-      onLog: (l) => console.log(`[pipeline:${l.level}] ${l.msg}`)
+      onLog: (l) => console.log(`[pipeline:${l.level}] ${l.msg}`),
+      onHealth: paintHealth
     })
 
     app.on('activate', () => {

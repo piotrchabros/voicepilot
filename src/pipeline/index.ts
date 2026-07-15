@@ -123,7 +123,8 @@ async function init(cfg: InitMsg): Promise<void> {
               apiKey: cfg.sonioxApiKey,
               wsUrl: cfg.sonioxWsUrl,
               languageHints: [...cfg.sonioxLanguageHints],
-              onLog: (level, msg) => log(level, msg)
+              onLog: (level, msg) => log(level, msg),
+              onHealth: (ok, detail) => send({ type: 'health', ok, source: 'soniox', detail })
             })
           : new SherpaStt(cfg.zipformerDir)
       legs.set(leg, {

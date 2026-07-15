@@ -108,6 +108,9 @@ export interface SonioxOptions {
   wsUrl?: string
   languageHints?: string[]
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void
+  /** Health events for the overlay banner (spec.md Task 2.4): `ok:true` on a
+   *  successful connect, `ok:false` with the ws error detail on disconnect. */
+  onHealth?: (ok: boolean, detail: string) => void
 }
 
 export class SonioxStt implements SttEngine {
@@ -160,6 +163,7 @@ export class SonioxStt implements SttEngine {
       this.connecting = false
       this.lastSentAt = Date.now()
       this.log('info', `session opened (${MODEL}), backlog=${this.backlog.length} frames`)
+      this.opts.onHealth?.(true, 'connected')
       for (const buf of this.backlog) ws.send(buf)
       this.backlog = []
     })
@@ -179,7 +183,11 @@ export class SonioxStt implements SttEngine {
       if (res.tokens !== undefined) this.tracker.onTokens(res.tokens)
     })
 
-    ws.on('error', (err: Error) => this.log('warn', `ws error: ${err.message}`))
+    ws.on('error', (err: Error) => {
+      const detail = `ws error: ${err.message}`
+      this.log('warn', detail)
+      this.opts.onHealth?.(false, detail)
+    })
 
     ws.on('close', () => {
       // No eager reconnect: the next speech frame reconnects lazily, and the

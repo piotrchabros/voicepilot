@@ -1,0 +1,3 @@
+{"task_id": "2.4", "status": "FAIL", "test_file": "test/health-events.test.ts", "reason": "src/main/health-events.ts does not exist yet", "ts": "2026-07-15T16:18:38Z"}
+{"task_id": "2.4", "status": "FAIL", "test_file": "test/health-banner.test.ts", "reason": "src/renderer/health-banner.ts does not exist yet", "ts": "2026-07-15T16:18:38Z"}
+{"task_id": "2.4", "status": "FAIL", "test_file": "test/stt-soniox-health.test.ts", "reason": "SonioxOptions.onHealth not implemented yet - events array empty", "ts": "2026-07-15T16:18:38Z"}

@@ -51,3 +51,34 @@ body {
 #hint.generated {
   color: rgb(255, 255, 255);
 }
+
+/* Health banner: small red pill, top-centre — deliberately distinct from the
+   hint pill below so the two never compete for attention. Hidden by default;
+   `.visible` is toggled by the script on ok:false (spec.md Task 2.4). */
+#health-pill {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(153, 20, 20, 0.92);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+#health-pill.visible {
+  opacity: 1;
+}
+
+#health {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  color: rgb(255, 255, 255);
+}

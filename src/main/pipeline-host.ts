@@ -2,7 +2,7 @@ import { type UtilityProcess, utilityProcess } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AudioFrame } from '@shared/audio-source'
-import type { FromPipeline, Hint, InitMsg, LogMsg } from '@shared/types'
+import type { FromPipeline, HealthMsg, Hint, InitMsg, LogMsg } from '@shared/types'
 import {
   checkModels,
   paths,
@@ -12,6 +12,7 @@ import {
   sonioxApiKey,
   sonioxWsUrl
 } from './config'
+import { audioEndToHealthMsg, audioHealthToMsg } from './health-events'
 import { LlamaSupervisor } from './llama-supervisor'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
 import { legForSpeaker, SystemAudioSource } from './system-audio-source'
@@ -28,6 +29,9 @@ import { legForSpeaker, SystemAudioSource } from './system-audio-source'
 export interface PipelineDeps {
   onHint: (hint: Hint) => void
   onLog: (log: LogMsg) => void
+  /** Sidecar exit / device loss / Soniox disconnect — surfaced as a banner,
+   *  not just a log line (spec.md Task 2.4). */
+  onHealth: (health: HealthMsg) => void
 }
 
 export interface PipelineHandle {
@@ -73,6 +77,10 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
         break
       case 'metric':
         // consumed by the bench harness only
+        break
+      case 'health':
+        // e.g. Soniox ws disconnect, reported by the pipeline utilityProcess.
+        deps.onHealth(msg)
         break
     }
   })
@@ -125,8 +133,13 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
   })
   audioSource.on('health', (status) => {
     log(status.ok ? 'info' : 'warn', status.detail)
+    deps.onHealth(audioHealthToMsg(status))
   })
-  audioSource.on('end', (reason) => log('warn', `capture sidecar ended (${reason})`))
+  audioSource.on('end', (reason) => {
+    log('warn', `capture sidecar ended (${reason})`)
+    const health = audioEndToHealthMsg(reason)
+    if (health !== null) deps.onHealth(health)
+  })
   void audioSource.start()
 
   return {

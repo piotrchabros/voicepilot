@@ -91,12 +91,29 @@ export interface ReadyMsg {
   readonly type: 'ready'
 }
 
-export type FromPipeline = HintMsg | MetricMsg | LogMsg | ReadyMsg
+/** Which failure surface a health event came from. */
+export type HealthSource = 'sidecar' | 'soniox' | 'device'
+
+/** main/pipeline -> overlay: a health-affecting event (sidecar exit, device
+ *  loss, Soniox disconnect...). `ok:false` means degraded/broken; `ok:true`
+ *  means recovered. Previously these only reached the log — this is the wire
+ *  shape that lets the renderer show a banner instead (spec.md Task 2.4). */
+export interface HealthMsg {
+  readonly type: 'health'
+  readonly ok: boolean
+  readonly source: HealthSource
+  readonly detail: string
+}
+
+export type FromPipeline = HintMsg | MetricMsg | LogMsg | ReadyMsg | HealthMsg
 
 // ---- renderer API (exposed via preload contextBridge) ------------------------
 
 export interface CopilotBridge {
   onHint(cb: (hint: Hint) => void): () => void
+  /** Renderer -> main: a health event (sidecar exit / device loss / Soniox
+   *  disconnect) to reflect as a banner. */
+  onHealth(cb: (health: HealthMsg) => void): () => void
   /** Renderer -> main: subscription is live, safe to send hints now. */
   ready(): void
 }
