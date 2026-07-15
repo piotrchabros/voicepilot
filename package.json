@@ -1,0 +1,33 @@
+{
+  "name": "copilot",
+  "version": "0.1.0",
+  "description": "Live conversation copilot — Electron port (macOS only)",
+  "private": true,
+  "author": "Bespokesoft",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "app": "electron-vite build && electron .",
+    "list-devices": "electron-vite build && electron . --list-devices",
+    "bench": "electron-vite build && electron . --bench",
+    "ttft": "electron-vite build && electron . --ttft",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sidecar": "swift build --package-path native/capture -c release"
+  },
+  "dependencies": {
+    "onnxruntime-node": "1.19.2",
+    "sherpa-onnx-node": "^1.10.30"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "electron": "^33.0.0",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.2"
+  }
+}

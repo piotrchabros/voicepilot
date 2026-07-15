@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'none'" />
+    <title>copilot overlay</title>
+    <link rel="stylesheet" href="./overlay.css" />
+  </head>
+  <body>
+    <!--
+      The entire UI. One text node. Three words max. Big. Bottom-centre.
+      Dim for RETRIEVED (a guess), bright for GENERATED (earned it).
+      No framework — a framework here is pure overhead.
+    -->
+    <div id="pill"><span id="hint"></span></div>
+    <script type="module" src="./overlay.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,53 @@
+/* Transparent page — only the pill is visible. The window itself is click-through
+   and excluded from capture; this file only styles the one hint. */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  /* Never intercept pointer events — clicks pass through to the call. */
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#pill {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 28px;
+  border-radius: 14px;
+  background: rgba(12, 12, 14, 0.86);
+  /* Empty hint => no pill. Toggled by .visible from the script. */
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+#pill.visible {
+  opacity: 1;
+}
+
+#hint {
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 1;
+  white-space: nowrap;
+  /* Retrieved = dimmed guess; generated = full white. Set inline by the script. */
+  color: rgba(255, 255, 255, 0.55);
+}
+
+#hint.generated {
+  color: rgb(255, 255, 255);
+}

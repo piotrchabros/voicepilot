@@ -128,3 +128,15 @@ fabric.properties
 
 .codegraph
 
+node_modules
+
+### Electron / Node port
+# node_modules and out/ already ignored above
+.vite/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
+### Swift capture sidecar
+native/**/.build/
+.DS_Store
