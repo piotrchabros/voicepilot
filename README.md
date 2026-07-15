@@ -57,14 +57,30 @@ llama-server -m ~/models/Qwen3-4B-Instruct-Q4_K_M.gguf \
 
 `--parallel 1` is not a typo. One slot = one KV cache = it stays warm.
 
-**4. playbook.tsv**
+**4. playbook/*.yaml**
 
-```
-za drogo	Cena vs koszt zwłoki — zapytaj o koszt status quo
-muszę pogadać z zespołem	Kto jeszcze decyduje? Umów ich na call
-wyślij ofertę	Nie wysyłaj. Umów 15 min na przejście przez nią
-nie mamy teraz budżetu	Kiedy planujecie budżet? Zapytaj o cykl
-mamy już dostawcę	Co byś zmienił w obecnym rozwiązaniu?
+Each file under `playbook/` declares one or more plays as
+`{ id, trigger, headline, line, detail?, phrases }` — `trigger` must be one of
+the Tier-1 labels in `src/pipeline/classifier.ts`; `phrases` are the trigger
+phrase(s) (including inflected variants) matched via char-trigram cosine
+(`src/pipeline/playbook.ts`):
+
+```yaml
+entries:
+  - id: price_objection_status_quo
+    trigger: price_objection
+    headline: Cena vs koszt zwłoki
+    line: zapytaj o koszt status quo
+    phrases:
+      - za drogo
+      - za drogie
+      - za drogi
+  - id: authority_objection_team_decides
+    trigger: authority_objection
+    headline: Kto jeszcze decyduje
+    line: umów ich na call
+    phrases:
+      - muszę pogadać z zespołem
 ```
 
 **5. Run**

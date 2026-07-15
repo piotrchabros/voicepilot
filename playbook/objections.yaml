@@ -49,7 +49,7 @@ entries:
       - korzystamy juz z innego rozwiazania
 
   - id: need_question_needs_to_think
-    trigger: need_question
+    trigger: timing_objection
     headline: Co budzi watpliwosc
     line: zapytaj co konkretnie budzi watpliwosc
     phrases:

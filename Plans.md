@@ -27,14 +27,14 @@
 | 2.1 | [lane:gate] [tdd:required] `AudioSource`/`AudioFrame`/`SpeakerRole`/`separation` 型を `src/shared` に定義（spec.md §2 の Float32 決定に従う） | 型 + parameterized contract test suite（frame 形状 / t 単調増加 / end 一回 / health 発火）が存在し green | 0.1 | cc:完了 [78bb76e] |
 | 2.2 | [lane:gate] [tdd:required] `FileAudioSource`: 既存 `wav.ts` を包んで AudioFrame を natural cadence で emit（bench.ts と統合） | contract suite を pass、bench が FileAudioSource 経由で動く | 2.1 | cc:完了 [3a86ea6] |
 | 2.3 | [lane:gate] [tdd:required] `SystemAudioSource`: 既存 sidecar demux（`main/sidecar.ts`）を adapter で包む。mic→rep / loopback→prospect、`separation:'mixed'`、sample-count 由来の `t` を付与 | contract suite pass、既存 E2E がこの seam 経由で動作 | 2.1 | cc:完了 [ced2a95] |
-| 2.4 | [lane:gate] [tdd:required] Health events end-to-end: sidecar exit / device loss / Soniox 切断 → UI banner（現在は log のみ） | 各障害の注入テストで `health {ok:false}` が UI まで届く | 2.3 | cc:WIP |
+| 2.4 | [lane:gate] [tdd:required] Health events end-to-end: sidecar exit / device loss / Soniox 切断 → UI banner（現在は log のみ） | 各障害の注入テストで `health {ok:false}` が UI まで届く | 2.3 | cc:完了 [7abf03f] |
 
 ## Phase 3: Classification & playbook（speculation は維持）
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 3.1 | [lane:gate] [tdd:required] Tier-1 classifier（PL ルール）: settled prospect turn に spec.md §3 の label を付与。`smalltalk|none` はカード抑制。`separation:'mixed'` 時は閾値引き上げ | PL fixture corpus（各 label + 語形変化 + 抑制ケース）green、判定 <200ms | 2.1 | cc:完了 [bb133ad] |
-| 3.2 | [lane:gate] [tdd:required] Playbook YAML 化: `{id,trigger,headline,line,detail}` schema、trigram マッチ維持、`playbook.tsv` → `playbook/*.yaml` 移行 | 既存 playbook テスト + schema validation テスト green、tsv 削除 | 3.1 | cc:WIP |
+| 3.2 | [lane:gate] [tdd:required] Playbook YAML 化: `{id,trigger,headline,line,detail}` schema、trigram マッチ維持、`playbook.tsv` → `playbook/*.yaml` 移行 | 既存 playbook テスト + schema validation テスト green、tsv 削除 | 3.1 | cc:完了 [82d6653] |
 | 3.3 | [lane:gate] [tdd:required] Suggestion payload + latency instrumentation: per-stage timestamp（transport tag 付き）を suggestion に添付、bench に集計を追加 | bench 出力に transport 別 p50/p95 が出る | 2.2 | cc:WIP |
 | 3.4 | [lane:gate] [tdd:required] No-sentiment guard: label set を閉集合で固定、Tier-2/生成 prompt に感情推論禁止を明記、これを assert するテスト | 禁止語 assert テスト green、spec.md §1 non-goals 準拠 | 3.1 | cc:完了 [0578c78] |
 | 3.5 | [lane:fast] [tdd:required] Echo/headset 警告: mic×loopback 相関が閾値超過で UI 警告 | 合成エコー音源で警告が発火するテスト green | 2.3 | cc:完了 [3c95e30] |
