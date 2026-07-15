@@ -107,14 +107,20 @@ describe('frame-loop gating regression (Task 3.3 reviewer finding, critical)', (
   // whatever later frame happened to arrive in between. Both
   // pipeline/index.ts and bench.ts now share this exact loop shape:
   //   if (shouldBeginTurn(ev)) clock.beginTurn(transport)
-  //   clock.mark('vad_out'); ... clock.mark('stt_interim')
-  // and speculate_fired/first_token/painted are marked later, out-of-band,
-  // by code that doesn't call beginTurn at all (HintEngine / bench's sink).
+  //   if (ev === SPEECH_START || ev === SPEECH) { mark('vad_out'); mark('stt_interim') }
+  // vad_out/stt_interim are scoped to SPEECH_START/SPEECH ONLY (reviewer
+  // finding, major): marking vad_out on SILENCE/TURN_END frames too would let
+  // a frame that arrives AFTER speculate_fired overwrite vad_out with a later
+  // timestamp, making the vad_out -> stt_interim delta go negative.
+  // speculate_fired/first_token/painted are marked later, out-of-band, by
+  // code that doesn't call beginTurn at all (HintEngine / bench's sink).
   function driveFrameLoop(clock: StageClock, events: readonly VadEvent[]): void {
     for (const ev of events) {
       if (shouldBeginTurn(ev)) clock.beginTurn('system')
-      clock.mark('vad_out')
-      if (ev === 'SPEECH_START' || ev === 'SPEECH') clock.mark('stt_interim')
+      if (ev === 'SPEECH_START' || ev === 'SPEECH') {
+        clock.mark('vad_out')
+        clock.mark('stt_interim')
+      }
     }
   }
 
@@ -138,16 +144,24 @@ describe('frame-loop gating regression (Task 3.3 reviewer finding, critical)', (
     expect(snap?.stages.first_token).toBe(282)
   })
 
-  it('SILENCE frames never reset the baseline mid-turn', () => {
-    // 0 = beginTurn (SPEECH_START), 1 = vad_out, 50 = stt_interim,
-    // 300 = vad_out on the SILENCE frame (no stt_interim, no beginTurn),
-    // 400 = speculate_fired, still relative to the original t=0 baseline.
-    const clock = new StageClock(fakeClock(0, 1, 50, 300, 400))
+  it('SILENCE frames never reset the baseline NOR overwrite vad_out mid-turn', () => {
+    // 0 = beginTurn (SPEECH_START), 5 = vad_out, 20 = stt_interim.
+    // The SILENCE frame that follows marks NOTHING (no beginTurn, no vad_out,
+    // no stt_interim — production code only marks those on SPEECH_START/
+    // SPEECH). 300 = speculate_fired, still relative to the original t=0
+    // baseline, with vad_out untouched by the intervening SILENCE frame.
+    const clock = new StageClock(fakeClock(0, 5, 20, 300))
     driveFrameLoop(clock, ['SPEECH_START', 'SILENCE'])
     clock.mark('speculate_fired')
     const snap = clock.snapshot()
     expect(snap?.stages.frame_in).toBe(0)
-    expect(snap?.stages.speculate_fired).toBe(400)
+    // Reviewer finding (major): vad_out must stay exactly what SPEECH_START
+    // set it to — a SILENCE frame overwriting it with a later timestamp would
+    // make vad_out -> stt_interim go negative once TURN_END/SILENCE arrives
+    // after the debounce.
+    expect(snap?.stages.vad_out).toBe(5)
+    expect(snap?.stages.stt_interim).toBe(20)
+    expect(snap?.stages.speculate_fired).toBe(300)
   })
 
   it('a genuinely new turn (next SPEECH_START) does reset the baseline', () => {

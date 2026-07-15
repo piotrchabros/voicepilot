@@ -35,7 +35,7 @@
 |------|------|-----|---------|--------|
 | 3.1 | [lane:gate] [tdd:required] Tier-1 classifier（PL ルール）: settled prospect turn に spec.md §3 の label を付与。`smalltalk|none` はカード抑制。`separation:'mixed'` 時は閾値引き上げ | PL fixture corpus（各 label + 語形変化 + 抑制ケース）green、判定 <200ms | 2.1 | cc:完了 [bb133ad] |
 | 3.2 | [lane:gate] [tdd:required] Playbook YAML 化: `{id,trigger,headline,line,detail}` schema、trigram マッチ維持、`playbook.tsv` → `playbook/*.yaml` 移行 | 既存 playbook テスト + schema validation テスト green、tsv 削除 | 3.1 | cc:完了 [82d6653] |
-| 3.3 | [lane:gate] [tdd:required] Suggestion payload + latency instrumentation: per-stage timestamp（transport tag 付き）を suggestion に添付、bench に集計を追加 | bench 出力に transport 別 p50/p95 が出る | 2.2 | cc:WIP |
+| 3.3 | [lane:gate] [tdd:required] Suggestion payload + latency instrumentation: per-stage timestamp（transport tag 付き）を suggestion に添付、bench に集計を追加 | bench 出力に transport 別 p50/p95 が出る | 2.2 | cc:完了 [bb602a6] |
 | 3.4 | [lane:gate] [tdd:required] No-sentiment guard: label set を閉集合で固定、Tier-2/生成 prompt に感情推論禁止を明記、これを assert するテスト | 禁止語 assert テスト green、spec.md §1 non-goals 準拠 | 3.1 | cc:完了 [0578c78] |
 | 3.5 | [lane:fast] [tdd:required] Echo/headset 警告: mic×loopback 相関が閾値超過で UI 警告 | 合成エコー音源で警告が発火するテスト green | 2.3 | cc:完了 [3c95e30] |
 
@@ -43,7 +43,7 @@
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 4.1 | [lane:gate] [tdd:required] Consent gate (B): 通話ごとの affirmation を Start 前に必須化、timestamp 付きで記録、録音インジケータ常時表示、announcement script 表示 | affirmation なしで capture が開始しないテスト green、記録ファイルに timestamp | 2.3 | cc:TODO |
+| 4.1 | [lane:gate] [tdd:required] Consent gate (B): 通話ごとの affirmation を Start 前に必須化、timestamp 付きで記録、録音インジケータ常時表示、announcement script 表示 | affirmation なしで capture が開始しないテスト green、記録ファイルに timestamp | 2.3 | cc:WIP |
 | 4.2 | [lane:gate] [tdd:skip:ui-manual-qa] Transport chrome: mode 表示、health banner（2.4 の event を表示）、suggestion card（headline ≤6 words + line、replace 方式は既存踏襲） | 手動 QA チェックリスト全項目 pass（スクリーンショット evidence） | 2.4, 3.3 | cc:TODO |
 
 ## Phase 5: Transport A — Twilio PSTN（着手時に service 抽出）

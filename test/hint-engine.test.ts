@@ -142,7 +142,7 @@ describe('HintEngine optional StageClock integration (Task 3.3)', () => {
 
   it('with no clock supplied, hints carry no timing (unchanged existing behavior)', () => {
     const llm = new StubLlm()
-    const playbook = Playbook.parse(TSV)
+    const playbook = Playbook.fromYaml(YAML)
     const state = new TranscriptState('sys', 'pb', 12)
     const hints: Hint[] = []
     const engine = new HintEngine(llm, playbook, state, (h) => hints.push(h))
@@ -154,7 +154,7 @@ describe('HintEngine optional StageClock integration (Task 3.3)', () => {
   it('when a clock is supplied, every sinked hint carries a timing snapshot with the marked stages', () => {
     const llm = new StubLlm()
     llm.nextTokens = [['Zapytaj', ' o budzet']]
-    const playbook = Playbook.parse(TSV)
+    const playbook = Playbook.fromYaml(YAML)
     const state = new TranscriptState('sys', 'pb', 12)
     const hints: Hint[] = []
     const clock = new StageClock(() => tick++)

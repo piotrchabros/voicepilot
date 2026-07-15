@@ -95,9 +95,12 @@ export async function runBench(wav: string | undefined): Promise<void> {
     // pipeline/index.ts for why resetting on every frame corrupts
     // speculate_fired/first_token attribution.
     if (shouldBeginTurn(ev)) clock.beginTurn('file')
-    clock.mark('vad_out')
 
     if (ev === 'SPEECH_START' || ev === 'SPEECH') {
+      // vad_out/stt_interim are scoped to SPEECH_START/SPEECH only — marking
+      // them on SILENCE/TURN_END frames too would let a later frame overwrite
+      // vad_out with a LATER timestamp, making vad_out -> stt_interim negative.
+      clock.mark('vad_out')
       stt.accept(frame.pcm)
       const interim = stt.interim()
       clock.mark('stt_interim')

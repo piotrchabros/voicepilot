@@ -101,10 +101,7 @@ let echoWarned = false
 
 // Shared per-suggestion latency clock (spec.md §3, Task 3.3). This is the
 // live SystemAudioSource pipeline, so transport is always 'system' here.
-// `beginTurn` restarts on every THEM speech frame — debounce cancel-previous
-// means there is only ever one "live" pending speculation, and it always
-// belongs to the most recently marked frame, so this stays consistent with
-// what actually fires.
+// See processFrame() below for when the baseline actually resets.
 const clock = new StageClock()
 
 async function init(cfg: InitMsg): Promise<void> {
@@ -200,7 +197,6 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
   // every frame would wipe stt_interim's mark before the debounced
   // speculate_fired/first_token land, misattributing them to a later frame.
   if (isThem && shouldBeginTurn(ev)) clock.beginTurn('system')
-  if (isThem) clock.mark('vad_out')
 
   if (DEBUG) {
     leg.rx++
@@ -227,6 +223,11 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
       if (DEBUG) log('info', `${leg.who}: speech start`)
     // falls through
     case 'SPEECH': {
+      // vad_out/stt_interim are scoped to SPEECH_START/SPEECH only — marking
+      // them on SILENCE frames too would let a TURN_END/SILENCE frame that
+      // arrives after speculate_fired/first_token overwrite vad_out with a
+      // LATER timestamp, making vad_out -> stt_interim go negative.
+      if (isThem) clock.mark('vad_out')
       leg.stt.accept(samples)
       state.live(leg.who, leg.stt.interim())
       if (isThem) clock.mark('stt_interim')
