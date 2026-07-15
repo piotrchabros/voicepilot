@@ -4,6 +4,7 @@
 // + Playbook, and a SEPARATE SileroVad + SttEngine per capture leg.
 
 import {
+  LEG_MIC,
   type FrameMsg,
   type FromPipeline,
   type Hint,
@@ -14,6 +15,7 @@ import {
   type ToPipeline
 } from '@shared/types'
 import { classifyTurn } from './classifier'
+import { EchoDetector, type EchoSpeaker } from './echo-detector'
 import { HintEngine } from './hint-engine'
 import { LlamaClient } from './llama-client'
 import { Playbook } from './playbook'
@@ -78,6 +80,11 @@ interface LegRuntime {
   rx: number
   maxProb: number
   sumAbs: number
+  // Fixed to the *physical* capture leg (mic vs. system audio/loopback),
+  // independent of COPILOT_MIC_SPECULATE's logical `who` remap — the echo
+  // detector cares which hardware channel a frame came from, not which
+  // party we're currently labeling it as for hinting purposes.
+  echoSpeaker: EchoSpeaker
 }
 
 const DEBUG = process.env['COPILOT_DEBUG'] === '1'
@@ -85,6 +92,11 @@ const DEBUG = process.env['COPILOT_DEBUG'] === '1'
 let engine: HintEngine | null = null
 let state: TranscriptState | null = null
 const legs = new Map<Leg, LegRuntime>()
+// spec.md §5.4: watches for the rep's own voice leaking into the loopback
+// (prospect) channel — a tell-tale sign the rep is on a speaker, not a
+// headset. One detector shared across legs since it correlates *between* them.
+const echoDetector = new EchoDetector()
+let echoWarned = false
 
 async function init(cfg: InitMsg): Promise<void> {
   try {
@@ -121,7 +133,9 @@ async function init(cfg: InitMsg): Promise<void> {
         tail: Promise.resolve(),
         rx: 0,
         maxProb: 0,
-        sumAbs: 0
+        sumAbs: 0,
+        // Physical channel, not the (possibly remapped) logical `who`.
+        echoSpeaker: leg === LEG_MIC ? 'rep' : 'prospect'
       })
     }
 
@@ -151,6 +165,17 @@ function onFrame(msg: FrameMsg): void {
 
 async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<void> {
   if (engine === null || state === null) return
+
+  // spec.md §5.4: cheap, always-on check (frame energy only, no per-sample
+  // correlation) independent of VAD/STT state. Warn exactly once per session
+  // on the suspected=false -> true transition — the UI banner wiring (2.4's
+  // HealthMsg) lands separately; this is log-only until that's in place.
+  const echoStatus = echoDetector.accept(leg.echoSpeaker, samples)
+  if (echoStatus.suspected && !echoWarned) {
+    echoWarned = true
+    log('warn', 'headset check: mic/loopback correlation high — use a headset')
+  }
+
   const ev = await leg.vad.accept(samples)
 
   if (DEBUG) {
