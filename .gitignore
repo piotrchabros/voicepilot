@@ -100,3 +100,7 @@ native/**/.build/
 
 # Soniox API key (never commit)
 .soniox-key
+
+# harness worktrees (never commit)
+.wt/
+.harness-worktrees/

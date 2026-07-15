@@ -96,7 +96,7 @@ async function init(cfg: InitMsg): Promise<void> {
           ? new SonioxStt({
               apiKey: cfg.sonioxApiKey,
               languageHints: [...cfg.sonioxLanguageHints],
-              onLog: (level, msg) => log(level, msg),
+              onLog: (level, msg) => log(level, msg)
             })
           : new SherpaStt(cfg.zipformerDir)
       legs.set(leg, {

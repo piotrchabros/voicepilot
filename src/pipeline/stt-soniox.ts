@@ -118,8 +118,8 @@ export class SonioxStt implements SttEngine {
           language_hints: this.opts.languageHints ?? ['pl', 'en'],
           // VAD owns endpointing (two components racing to decide when the turn
           // ended is a bug you'll spend a week not finding) — leave Soniox's off.
-          enable_endpoint_detection: false,
-        }),
+          enable_endpoint_detection: false
+        })
       )
       this.open = true
       this.connecting = false

@@ -13,7 +13,9 @@ const WebSocket = require('ws')
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const apiKey =
   process.env.SONIOX_API_KEY?.trim() ||
-  (existsSync(join(root, '.soniox-key')) ? readFileSync(join(root, '.soniox-key'), 'utf8').trim() : '')
+  (existsSync(join(root, '.soniox-key'))
+    ? readFileSync(join(root, '.soniox-key'), 'utf8').trim()
+    : '')
 if (!apiKey) {
   console.error('No API key. Set SONIOX_API_KEY or create .soniox-key')
   process.exit(1)
@@ -21,11 +23,17 @@ if (!apiKey) {
 
 const wavPath = process.argv[2] ?? '/tmp/say.wav'
 const buf = readFileSync(wavPath)
-let ds = 44, dl = buf.length - 44, off = 12
+let ds = 44,
+  dl = buf.length - 44,
+  off = 12
 while (off + 8 <= buf.length) {
   const id = buf.toString('ascii', off, off + 4)
   const size = buf.readUInt32LE(off + 4)
-  if (id === 'data') { ds = off + 8; dl = size; break }
+  if (id === 'data') {
+    ds = off + 8
+    dl = size
+    break
+  }
   off += 8 + size + (size % 2)
 }
 const pcm = buf.subarray(ds, Math.min(ds + dl, buf.length))
@@ -38,14 +46,16 @@ const t0 = Date.now()
 let firstTokenAt = 0
 
 ws.on('open', async () => {
-  ws.send(JSON.stringify({
-    api_key: apiKey,
-    model: 'stt-rt-v4',
-    audio_format: 'pcm_s16le',
-    sample_rate: 16000,
-    num_channels: 1,
-    language_hints: ['pl', 'en'],
-  }))
+  ws.send(
+    JSON.stringify({
+      api_key: apiKey,
+      model: 'stt-rt-v4',
+      audio_format: 'pcm_s16le',
+      sample_rate: 16000,
+      num_channels: 1,
+      language_hints: ['pl', 'en']
+    })
+  )
   // Stream in real-time-ish chunks (100ms), then end with an empty frame.
   const chunk = 3200
   for (let o = 0; o < pcm.length; o += chunk) {
@@ -79,4 +89,7 @@ ws.on('message', (data) => {
   }
 })
 
-ws.on('error', (e) => { console.error('ws error:', e.message); process.exit(1) })
+ws.on('error', (e) => {
+  console.error('ws error:', e.message)
+  process.exit(1)
+})

@@ -2,7 +2,14 @@ import { type UtilityProcess, utilityProcess } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FromPipeline, Hint, InitMsg, Leg, LogMsg } from '@shared/types'
-import { checkModels, paths, playbookPath, sidecarBinary, SONIOX_LANGUAGE_HINTS, sonioxApiKey } from './config'
+import {
+  checkModels,
+  paths,
+  playbookPath,
+  sidecarBinary,
+  SONIOX_LANGUAGE_HINTS,
+  sonioxApiKey
+} from './config'
 import { LlamaSupervisor } from './llama-supervisor'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
 import { Sidecar } from './sidecar'

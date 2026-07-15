@@ -8,14 +8,14 @@ describe('Soniox TokenTracker', () => {
     const t = new TokenTracker()
     t.onTokens([
       { text: 'To', is_final: true },
-      { text: ' jest', is_final: false },
+      { text: ' jest', is_final: false }
     ])
     expect(t.text()).toBe('To jest')
 
     // Next response: previous non-final firmed up + new guess.
     t.onTokens([
       { text: ' jest', is_final: true },
-      { text: ' za dro', is_final: false },
+      { text: ' za dro', is_final: false }
     ])
     expect(t.text()).toBe('To jest za dro')
 
@@ -42,7 +42,7 @@ describe('Soniox TokenTracker', () => {
     t.onTokens([
       { text: 'za drogo.', is_final: true },
       { text: '<fin>', is_final: true },
-      { text: '<end>', is_final: true },
+      { text: '<end>', is_final: true }
     ])
     expect(t.text()).toBe('za drogo.')
   })
