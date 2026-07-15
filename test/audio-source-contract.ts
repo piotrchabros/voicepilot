@@ -16,6 +16,16 @@ export interface AudioSourceHarness {
   source: AudioSource
   /** Drives the source from first frame through its natural end. */
   drive: () => Promise<void>
+  /**
+   * Triggers a synthetic `health` event on the source under test.
+   *
+   * Typed as optional only so a factory signature reads naturally; every real
+   * `AudioSource` factory MUST provide this — health reporting is part of the
+   * seam contract (spec.md §2's `on('health')` describes a real event, not a
+   * stub), so test (f) below treats a missing hook as a contract violation,
+   * not a skip.
+   */
+  triggerHealth?: () => void
 }
 
 const VALID_SPEAKERS: ReadonlySet<SpeakerRole> = new Set(['prospect', 'rep'])
@@ -98,12 +108,52 @@ export function describeAudioSourceContract(
       expect(VALID_SEPARATIONS.has(source.separation)).toBe(true)
     })
 
-    it('(f) allows registering a health handler without throwing', async () => {
-      const { source } = await factory()
+    it('(f) emits a well-shaped health status when triggered', async () => {
+      const harness = await factory()
+      const { source, triggerHealth } = harness
 
-      expect(() => {
-        source.on('health', () => {})
-      }).not.toThrow()
+      if (!triggerHealth) {
+        // Not a skip: every real AudioSource must expose a health-reporting
+        // path (spec.md §2's on('health')). A factory that omits triggerHealth
+        // is a contract violation, so this fails loudly instead of quietly
+        // passing an assertion-free smoke check.
+        throw new Error(
+          `AudioSource contract violation (${name}): factory must provide triggerHealth() ` +
+            'so this suite can exercise a real health event, not just registration.'
+        )
+      }
+
+      const statuses: Array<{ ok: boolean; detail: string }> = []
+      source.on('health', (s) => statuses.push(s))
+
+      triggerHealth()
+
+      expect(statuses.length).toBeGreaterThan(0)
+      for (const s of statuses) {
+        expect(typeof s.ok).toBe('boolean')
+        expect(typeof s.detail).toBe('string')
+      }
+    })
+
+    it('(g) stop() racing an in-flight drive() cuts off remaining frames', async () => {
+      // Establish the undisturbed frame count via a fresh, fully-driven instance.
+      const control = await factory()
+      const controlFrames: AudioFrame[] = []
+      control.source.on('audio', (f) => controlFrames.push(f))
+      await control.source.start()
+      await control.drive()
+      await control.source.stop()
+
+      // Race stop() against a second, fresh instance's in-flight drive().
+      const subject = await factory()
+      const subjectFrames: AudioFrame[] = []
+      subject.source.on('audio', (f) => subjectFrames.push(f))
+      await subject.source.start()
+      const drivePromise = subject.drive()
+      await subject.source.stop() // must actually cut the drive short
+      await drivePromise
+
+      expect(subjectFrames.length).toBeLessThan(controlFrames.length)
     })
   })
 }

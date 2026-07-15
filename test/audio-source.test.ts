@@ -11,7 +11,8 @@ interface MemoryFrameSpec {
 
 type AudioHandler = (frame: AudioFrame) => void
 type EndHandler = (reason: string) => void
-type HealthHandler = (status: { ok: boolean; detail: string }) => void
+type HealthStatus = { ok: boolean; detail: string }
+type HealthHandler = (status: HealthStatus) => void
 
 /**
  * Minimal in-memory `AudioSource` test double: replays a fixed frame sequence.
@@ -71,6 +72,13 @@ class MemoryAudioSource implements AudioSource {
     this.emitEnd('drained')
   }
 
+  /** Test-only driver: fires a synthetic health status to registered handlers.
+   *  Real sources (sidecar health, Twilio media-WS health, etc.) have their
+   *  own real trigger path; this is the memory double's equivalent. */
+  triggerHealth(status: HealthStatus = { ok: true, detail: 'memory source nominal' }): void {
+    for (const h of this.healthHandlers) h(status)
+  }
+
   private emitEnd(reason: string): void {
     if (this.ended) return
     this.ended = true
@@ -88,25 +96,16 @@ function defaultFrames(): MemoryFrameSpec[] {
 
 async function factory(): Promise<AudioSourceHarness & { source: MemoryAudioSource }> {
   const source = new MemoryAudioSource(defaultFrames())
-  return { source, drive: () => source.drive() }
+  return {
+    source,
+    drive: () => source.drive(),
+    triggerHealth: () => source.triggerHealth()
+  }
 }
 
 describeAudioSourceContract('memory', factory)
 
 describe('MemoryAudioSource (test double, additional coverage)', () => {
-  it('stop() called mid-drive halts further frame delivery', async () => {
-    const source = new MemoryAudioSource(defaultFrames())
-    const received: AudioFrame[] = []
-    source.on('audio', (f) => received.push(f))
-
-    await source.start()
-    const drivePromise = source.drive()
-    await source.stop() // races the in-flight drive() before its first microtask boundary
-    await drivePromise
-
-    expect(received.length).toBeLessThan(defaultFrames().length)
-  })
-
   it('reports the declared transport, speakers, and separation', async () => {
     const source = new MemoryAudioSource(defaultFrames(), {
       speakers: ['prospect'],
@@ -116,5 +115,15 @@ describe('MemoryAudioSource (test double, additional coverage)', () => {
     expect(source.transport).toBe('file')
     expect(source.speakers).toEqual(['prospect'])
     expect(source.separation).toBe('mixed')
+  })
+
+  it('triggerHealth() forwards the given status to health handlers verbatim', async () => {
+    const source = new MemoryAudioSource(defaultFrames())
+    const statuses: Array<{ ok: boolean; detail: string }> = []
+    source.on('health', (s) => statuses.push(s))
+
+    source.triggerHealth({ ok: false, detail: 'soniox endpoint unreachable' })
+
+    expect(statuses).toEqual([{ ok: false, detail: 'soniox endpoint unreachable' }])
   })
 })

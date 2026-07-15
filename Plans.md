@@ -16,7 +16,7 @@
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 1.1 | [lane:gate] [tdd:required] Soniox EU endpoint: `SONIOX_WS_URL` config 化 + boot assertion（EU host allowlist に解決先が一致しなければ起動拒否）。`stt-soniox.ts:26` と `scripts/soniox-check.mjs` の hardcode を除去。EU hostname は live docs から取得（unknown → 調査 evidence を残す） | 非 EU URL で起動失敗するテスト green、EU URL で live smoke 成功 | 0.1 | cc:TODO |
+| 1.1 | [lane:gate] [tdd:required] Soniox EU endpoint: `SONIOX_WS_URL` config 化 + boot assertion（EU host allowlist に解決先が一致しなければ起動拒否）。`stt-soniox.ts:26` と `scripts/soniox-check.mjs` の hardcode を除去。EU hostname は live docs から取得（unknown → 調査 evidence を残す） | 非 EU URL で起動失敗するテスト green、EU URL で live smoke 成功 | 0.1 | cc:WIP |
 | 1.2 | [lane:gate] [tdd:skip:config-only] Secrets 一本化: `.env` + zod fail-fast、`.soniox-key` は deprecated fallback（warn 出力、chmod 600） | 必須 env 欠落で boot が明示エラー、warn が出る | 1.1 | cc:TODO |
 | 1.3 | [lane:gate] [tdd:skip:human-legal] DPA/法務ブロッカー台帳: Soniox EU region 有効化確認、Soniox/Twilio DPA 締結状況、consent 文言（PL）法務レビュー、rep 監視（労働法）注記を `docs/compliance.md` に記録。**real-prospect call はこれらが green になるまで禁止** | 台帳が存在し、各項目に 状態（done/unknown/blocked）と根拠リンクが付く | - | cc:完了 [85ae946] |
 
@@ -24,7 +24,7 @@
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 2.1 | [lane:gate] [tdd:required] `AudioSource`/`AudioFrame`/`SpeakerRole`/`separation` 型を `src/shared` に定義（spec.md §2 の Float32 決定に従う） | 型 + parameterized contract test suite（frame 形状 / t 単調増加 / end 一回 / health 発火）が存在し green | 0.1 | cc:TODO |
+| 2.1 | [lane:gate] [tdd:required] `AudioSource`/`AudioFrame`/`SpeakerRole`/`separation` 型を `src/shared` に定義（spec.md §2 の Float32 決定に従う） | 型 + parameterized contract test suite（frame 形状 / t 単調増加 / end 一回 / health 発火）が存在し green | 0.1 | cc:完了 [78bb76e] |
 | 2.2 | [lane:gate] [tdd:required] `FileAudioSource`: 既存 `wav.ts` を包んで AudioFrame を natural cadence で emit（bench.ts と統合） | contract suite を pass、bench が FileAudioSource 経由で動く | 2.1 | cc:TODO |
 | 2.3 | [lane:gate] [tdd:required] `SystemAudioSource`: 既存 sidecar demux（`main/sidecar.ts`）を adapter で包む。mic→rep / loopback→prospect、`separation:'mixed'`、sample-count 由来の `t` を付与 | contract suite pass、既存 E2E がこの seam 経由で動作 | 2.1 | cc:TODO |
 | 2.4 | [lane:gate] [tdd:required] Health events end-to-end: sidecar exit / device loss / Soniox 切断 → UI banner（現在は log のみ） | 各障害の注入テストで `health {ok:false}` が UI まで届く | 2.3 | cc:TODO |
