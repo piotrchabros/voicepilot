@@ -10,7 +10,7 @@
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 0.1 | [lane:fast] [tdd:skip:tooling-only] Lint/formatter baseline 導入（biome、`npm run lint` + `npm run format:check`） | lint スクリプトが exit 0、CI 相当コマンドが README に記載 | - | cc:WIP |
-| 0.2 | [lane:gate] [tdd:required] Log hygiene: transcript/hint 本文を debug モード以外のログから排除（`pipeline/index.ts` の turn-end / hint ログを COPILOT_DEBUG ゲートで検証） | DEBUG off で起動したログに通話本文が 0 件（テストで検証）、spec.md §4.4 準拠 | - | cc:WIP |
+| 0.2 | [lane:gate] [tdd:required] Log hygiene: transcript/hint 本文を debug モード以外のログから排除（`pipeline/index.ts` の turn-end / hint ログを COPILOT_DEBUG ゲートで検証） | DEBUG off で起動したログに通話本文が 0 件（テストで検証）、spec.md §4.4 準拠 | - | cc:完了 [e9bef1d] |
 
 ## Phase 1: EU compliance hardening（既存コードの是正）
 

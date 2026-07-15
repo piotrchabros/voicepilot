@@ -6,11 +6,12 @@
 import {
   type FrameMsg,
   type FromPipeline,
+  type Hint,
   type InitMsg,
   type Leg,
   type Speaker,
   speakerOf,
-  type ToPipeline,
+  type ToPipeline
 } from '@shared/types'
 import { HintEngine } from './hint-engine'
 import { LlamaClient } from './llama-client'
@@ -39,6 +40,19 @@ function log(level: 'info' | 'warn' | 'error', msg: string): void {
   send({ type: 'log', level, msg })
 }
 
+// spec.md §4.4 (Compliance & security, "Log hygiene"): no transcript/hint text
+// in logs outside explicit debug mode; production default logs contain no call
+// content. These are pure formatters so log-hygiene.test.ts can pin the
+// contract without needing a live parentPort — callers must only invoke `log`
+// with the (possibly null) result, never build the string inline.
+export function formatTurnEndLog(who: Speaker, finalText: string, debug: boolean): string | null {
+  return debug ? `${who}: turn end -> "${finalText}"` : null
+}
+
+export function formatHintLog(hint: Hint, debug: boolean): string | null {
+  return debug ? `hint[${hint.source}] "${hint.text}"` : null
+}
+
 interface LegRuntime {
   who: Speaker
   vad: SileroVad
@@ -61,15 +75,12 @@ const legs = new Map<Leg, LegRuntime>()
 async function init(cfg: InitMsg): Promise<void> {
   try {
     const playbook = Playbook.parse(cfg.playbookTsv)
-    state = new TranscriptState(
-      `${cfg.systemPrompt}`,
-      cfg.staticContext,
-      cfg.maxTurns,
-    )
+    state = new TranscriptState(`${cfg.systemPrompt}`, cfg.staticContext, cfg.maxTurns)
     const llm = new LlamaClient(cfg.llamaBase)
 
     engine = new HintEngine(llm, playbook, state, (hint) => {
-      if (DEBUG) log('info', `hint[${hint.source}] "${hint.text}"`)
+      const hintLog = formatHintLog(hint, DEBUG)
+      if (hintLog !== null) log('info', hintLog)
       send({ type: 'hint', hint })
     })
 
@@ -95,7 +106,7 @@ async function init(cfg: InitMsg): Promise<void> {
         tail: Promise.resolve(),
         rx: 0,
         maxProb: 0,
-        sumAbs: 0,
+        sumAbs: 0
       })
     }
 
@@ -116,9 +127,11 @@ function onFrame(msg: FrameMsg): void {
   if (leg === null || leg === undefined || engine === null || state === null) return
   const samples = new Float32Array(msg.samples)
   // Enqueue on the per-leg chain to serialize async VAD/STT.
-  leg.tail = leg.tail.then(() => processFrame(leg, samples)).catch((err) => {
-    log('error', `frame processing error: ${err instanceof Error ? err.message : String(err)}`)
-  })
+  leg.tail = leg.tail
+    .then(() => processFrame(leg, samples))
+    .catch((err) => {
+      log('error', `frame processing error: ${err instanceof Error ? err.message : String(err)}`)
+    })
 }
 
 async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<void> {
@@ -135,7 +148,7 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
       // ~2s of frames. level = mean |sample| (0 => silence/no signal).
       log(
         'info',
-        `${leg.who}: rx=${leg.rx} level=${(leg.sumAbs / 62).toFixed(4)} vadMax=${leg.maxProb.toFixed(2)}`,
+        `${leg.who}: rx=${leg.rx} level=${(leg.sumAbs / 62).toFixed(4)} vadMax=${leg.maxProb.toFixed(2)}`
       )
       leg.maxProb = 0
       leg.sumAbs = 0
@@ -160,7 +173,8 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
     case 'TURN_END': {
       leg.stt.accept(samples)
       const finalText = await leg.stt.finish()
-      if (DEBUG) log('info', `${leg.who}: turn end -> "${finalText}"`)
+      const turnEndLog = formatTurnEndLog(leg.who, finalText, DEBUG)
+      if (turnEndLog !== null) log('info', turnEndLog)
       engine.onTurnEnd(leg.who, finalText)
       break
     }
