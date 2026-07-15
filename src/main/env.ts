@@ -31,7 +31,16 @@ const envSchema = z.object({
   COPILOT_DEMO: BOOLEAN_FLAG.optional(),
   COPILOT_NO_PROTECT: BOOLEAN_FLAG.optional(),
   COPILOT_PLACEHOLDER: BOOLEAN_FLAG.optional(),
-  COPILOT_MIC_SPECULATE: BOOLEAN_FLAG.optional()
+  COPILOT_MIC_SPECULATE: BOOLEAN_FLAG.optional(),
+  /**
+   * Transport-B consent announcement script (spec.md §4 item 2, Plans.md
+   * Task 4.1). This wording is a legal deliverable — docs/compliance.md item
+   * 4 — and must never be invented by an agent. Unset/blank falls back to a
+   * clearly-marked placeholder (`resolveAnnouncement` in ./consent); no
+   * format constraint here beyond "not blank", since the real text's shape
+   * isn't this schema's business.
+   */
+  CONSENT_ANNOUNCEMENT_PL: z.string().optional()
 })
 
 export type Env = z.infer<typeof envSchema>

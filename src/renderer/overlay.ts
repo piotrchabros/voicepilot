@@ -1,9 +1,12 @@
-import type { CopilotBridge, HealthMsg, Hint } from '@shared/types'
+import type { ConsentRequiredMsg, CopilotBridge, HealthMsg, Hint } from '@shared/types'
 import { bannerStateFor } from './health-banner'
+import { consentPromptViewFor, type ConsentViewState, recIndicatorViewFor } from './consent-view'
 
-// The renderer does exactly two things: paint hints, and show a health
-// banner. No other state, no other logic. Coalescing at ~30Hz happens
-// naturally because we only touch the DOM on an event.
+// The renderer paints hints, shows a health banner, and manages the
+// Transport-B consent gate UI (spec.md §4 item 2 / §5, Plans.md Task 4.1): a
+// consent prompt until the operator affirms, then a persistent REC
+// indicator. Coalescing at ~30Hz for hints happens naturally because we only
+// touch the DOM on an event.
 declare global {
   interface Window {
     copilot: CopilotBridge
@@ -18,6 +21,10 @@ const pill = document.getElementById('pill') as HTMLDivElement
 const hintEl = document.getElementById('hint') as HTMLSpanElement
 const healthPill = document.getElementById('health-pill') as HTMLDivElement
 const healthEl = document.getElementById('health') as HTMLSpanElement
+const consentPrompt = document.getElementById('consent-prompt') as HTMLDivElement
+const consentAnnouncementEl = document.getElementById('consent-announcement') as HTMLSpanElement
+const consentAffirmBtn = document.getElementById('consent-affirm-btn') as HTMLButtonElement
+const recIndicator = document.getElementById('rec-indicator') as HTMLDivElement
 
 let healthTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -50,7 +57,37 @@ function renderHealth(health: HealthMsg): void {
   }
 }
 
+// Local consent view state — the DOM's source of truth for the prompt/REC
+// toggle. Updated optimistically on affirm (main's ConsentGate.affirm() is
+// synchronous, so there's no round trip to wait on) and authoritatively from
+// `msg.state` on the initial `consent-required` message — *not* hardcoded to
+// 'pending', so a reload mid-call (operator already affirmed) restores the
+// REC indicator instead of re-showing the prompt (reviewer note).
+let consentState: ConsentViewState = 'pending'
+
+function renderConsent(msg: ConsentRequiredMsg): void {
+  consentState = msg.state
+  const prompt = consentPromptViewFor(consentState, msg.announcement, msg.isPlaceholder)
+  consentAnnouncementEl.textContent = prompt.announcement
+  consentPrompt.classList.toggle('visible', prompt.visible)
+  consentPrompt.classList.toggle('placeholder', prompt.isPlaceholder)
+  renderRecIndicator()
+}
+
+function renderRecIndicator(): void {
+  const rec = recIndicatorViewFor(consentState)
+  recIndicator.classList.toggle('visible', rec.visible)
+}
+
+consentAffirmBtn.addEventListener('click', () => {
+  window.copilot.affirmConsent()
+  consentState = 'affirmed'
+  consentPrompt.classList.remove('visible')
+  renderRecIndicator()
+})
+
 window.copilot.onHint(render)
 window.copilot.onHealth(renderHealth)
-// Tell main the subscription is live so no early hint is dropped.
+window.copilot.onConsentRequired(renderConsent)
+// Tell main the subscription is live so no early hint/health/consent message is dropped.
 window.copilot.ready()

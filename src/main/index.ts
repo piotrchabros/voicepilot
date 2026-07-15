@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
 import type { HealthMsg, Hint } from '@shared/types'
+import { ConsentGate, resolveAnnouncement } from './consent'
 import { loadEnv } from './env'
 import { startPipeline, type PipelineHandle } from './pipeline-host'
 import { runListDevices } from './list-devices'
@@ -11,7 +12,21 @@ import { runTtft } from './ttft'
 // stop the app before any window/pipeline exists, not surface as a
 // mid-session crash. Runs before the CLI-subcommand branch below too, so
 // --bench/--ttft/--list-devices get the same guarantee.
-loadEnv()
+const env = loadEnv()
+
+// Transport-B consent gate (spec.md §4 item 2 / Plans.md Task 4.1): one gate
+// per app run — this is a single-overlay, single-call-at-a-time process, so
+// one ConsentGate instance is the whole story. `announcement` is the on-screen
+// script; a legal deliverable (docs/compliance.md item 4), never invented
+// here — unset/blank resolves to a clearly-marked placeholder instead.
+const consentGate = new ConsentGate()
+const announcement = resolveAnnouncement(env.CONSENT_ANNOUNCEMENT_PL)
+if (announcement.isPlaceholder) {
+  console.warn(
+    '[consent] CONSENT_ANNOUNCEMENT_PL is not set — showing a placeholder announcement. ' +
+      'This must not be used on a real-prospect call (docs/compliance.md item 4).'
+  )
+}
 
 // Overlay geometry — mirrors the Java Overlay: 900×90, bottom-centre, above the dock.
 const OVERLAY_W = 900
@@ -112,6 +127,22 @@ if (argv.includes('--list-devices')) {
     // to paint, so no early hint is dropped into the void.
     ipcMain.on('overlay:ready', () => {
       console.log('[overlay:ready] renderer subscribed')
+
+      // Consent gate (spec.md §4 item 2 / §5, Plans.md Task 4.1): tell the
+      // renderer what to show. While pending, the overlay needs real clicks
+      // for the affirm button — the window is click-through the rest of the
+      // time (setIgnoreMouseEvents(true) above), so this is the one window
+      // during which that's flipped off.
+      overlay?.webContents.send('consent-required', {
+        type: 'consent-required',
+        announcement: announcement.text,
+        isPlaceholder: announcement.isPlaceholder,
+        // Reload mid-call must not re-show the prompt or drop the REC
+        // indicator if the operator already affirmed (reviewer note).
+        state: consentGate.state
+      })
+      if (consentGate.state !== 'affirmed') overlay?.setIgnoreMouseEvents(false)
+
       // Demo mode: cycle real generated-style hints so the overlay's rendering of
       // pipeline hints is visible without depending on live-mic quality.
       if (process.env['COPILOT_DEMO'] === '1') {
@@ -134,10 +165,20 @@ if (argv.includes('--list-devices')) {
       }
     })
 
+    // Operator affirms consent for this call (spec.md §4 item 2 / Plans.md
+    // Task 4.1): logs the affirmation, unblocks `startPipeline`'s capture
+    // start, and restores click-through now that the affirm button no longer
+    // needs real clicks.
+    ipcMain.on('consent:affirm', () => {
+      consentGate.affirm()
+      overlay?.setIgnoreMouseEvents(true, { forward: true })
+    })
+
     pipeline = startPipeline({
       onHint: paint,
       onLog: (l) => console.log(`[pipeline:${l.level}] ${l.msg}`),
-      onHealth: paintHealth
+      onHealth: paintHealth,
+      consentGate
     })
 
     app.on('activate', () => {

@@ -12,8 +12,19 @@
       bright for GENERATED) plus a small health banner pill (top, red, shown
       only on ok:false — sidecar exit / device loss / Soniox disconnect;
       spec.md Task 2.4). No framework — a framework here is pure overhead.
+
+      Transport-B consent chrome (spec.md §4 item 2 / §5, Plans.md Task 4.1):
+      a consent prompt (announcement script + affirm button) shown until the
+      operator affirms, then a persistent REC indicator for the rest of the
+      call. The window is click-through except while the prompt is visible
+      (main toggles setIgnoreMouseEvents around this).
     -->
     <div id="health-pill"><span id="health"></span></div>
+    <div id="consent-prompt">
+      <span id="consent-announcement"></span>
+      <button id="consent-affirm-btn" type="button">I have obtained / will announce consent</button>
+    </div>
+    <div id="rec-indicator"><span id="rec-dot"></span><span id="rec-label">REC</span></div>
     <div id="pill"><span id="hint"></span></div>
     <script type="module" src="./overlay.ts"></script>
   </body>

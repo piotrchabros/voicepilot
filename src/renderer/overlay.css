@@ -82,3 +82,89 @@ body {
   white-space: nowrap;
   color: rgb(255, 255, 255);
 }
+
+/* Transport-B consent prompt (spec.md §4 item 2 / §5, Plans.md Task 4.1):
+   shown until the operator affirms. Unlike the rest of the page, the affirm
+   button must receive real clicks — main flips setIgnoreMouseEvents(false)
+   for exactly this window, so `pointer-events: auto` here (overriding the
+   page-wide `none` above) is what lets the click land. */
+#consent-prompt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 760px;
+  padding: 22px 30px;
+  border-radius: 16px;
+  background: rgba(12, 12, 14, 0.94);
+  pointer-events: auto;
+}
+
+#consent-prompt.visible {
+  display: flex;
+}
+
+#consent-announcement {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 18px;
+  line-height: 1.4;
+  color: rgb(255, 255, 255);
+  text-align: center;
+}
+
+/* The placeholder is a compliance signal, not a design choice — an amber tint
+   makes "this is not the real legal wording yet" visually unmissable
+   (docs/compliance.md item 4 placeholder policy). */
+#consent-prompt.placeholder #consent-announcement {
+  color: rgb(255, 196, 87);
+}
+
+#consent-affirm-btn {
+  pointer-events: auto;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  background: rgb(255, 255, 255);
+  color: rgb(12, 12, 14);
+  cursor: pointer;
+}
+
+/* Persistent recording indicator (spec.md §4 item 2) — visible for the whole
+   duration capture may run, i.e. from affirmation onward. */
+#rec-indicator {
+  position: absolute;
+  left: 16px;
+  top: 8px;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(12, 12, 14, 0.86);
+}
+
+#rec-indicator.visible {
+  display: flex;
+}
+
+#rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(220, 38, 38);
+}
+
+#rec-label {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: rgb(255, 255, 255);
+}

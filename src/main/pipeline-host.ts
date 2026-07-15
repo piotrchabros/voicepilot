@@ -12,6 +12,7 @@ import {
   sonioxApiKey,
   sonioxWsUrl
 } from './config'
+import { type ConsentGate, wireCaptureStart } from './consent'
 import { audioEndToHealthMsg, audioHealthToMsg } from './health-events'
 import { LlamaSupervisor } from './llama-supervisor'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
@@ -32,6 +33,10 @@ export interface PipelineDeps {
   /** Sidecar exit / device loss / Soniox disconnect — surfaced as a banner,
    *  not just a log line (spec.md Task 2.4). */
   onHealth: (health: HealthMsg) => void
+  /** Transport-B procedural consent gate (spec.md §4 item 2 / Plans.md Task
+   *  4.1): `audioSource.start()` below is held behind `consentGate.onAffirmed`
+   *  — capture must never start before the operator affirms, per call. */
+  consentGate: ConsentGate
 }
 
 export interface PipelineHandle {
@@ -144,7 +149,17 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
     const health = audioEndToHealthMsg(reason)
     if (health !== null) deps.onHealth(health)
   })
-  void audioSource.start()
+
+  // Consent gate (spec.md §4 item 2 / Plans.md Task 4.1): capture never
+  // starts before the operator affirms, per call — not merely a UI hint,
+  // this is the actual gate on the audio source starting. Wiring extracted
+  // to `wireCaptureStart` (unit-tested directly, without this function's
+  // Electron/utilityProcess/llama-server dependencies).
+  wireCaptureStart(
+    deps.consentGate,
+    () => void audioSource.start(),
+    (msg) => log('info', msg)
+  )
 
   return {
     shutdown: () => {

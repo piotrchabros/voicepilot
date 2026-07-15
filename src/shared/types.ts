@@ -121,6 +121,26 @@ export interface HealthMsg {
 
 export type FromPipeline = HintMsg | MetricMsg | LogMsg | ReadyMsg | HealthMsg
 
+/** Transport-B consent state (spec.md §4 item 2 / Plans.md Task 4.1): whether
+ *  the operator has affirmed consent for this call yet. Single source of
+ *  truth for the literal union — shared by main's `ConsentGate` and
+ *  renderer's `consent-view.ts` so neither side can drift from the other. */
+export type ConsentState = 'pending' | 'affirmed'
+
+/** main -> renderer: the Transport-B consent announcement to show on screen,
+ *  and whether it's the unresolved placeholder (spec.md §4 item 2 / §5,
+ *  Plans.md Task 4.1). Sent once per overlay load, alongside `overlay:ready`. */
+export interface ConsentRequiredMsg {
+  readonly type: 'consent-required'
+  readonly announcement: string
+  readonly isPlaceholder: boolean
+  /** Gate state at send time. The renderer initializes from this rather than
+   *  assuming 'pending' — otherwise a reload mid-call (after the operator
+   *  already affirmed) would wrongly re-show the prompt and drop the
+   *  persistent REC indicator (reviewer note, Plans.md Task 4.1). */
+  readonly state: ConsentState
+}
+
 // ---- renderer API (exposed via preload contextBridge) ------------------------
 
 export interface CopilotBridge {
@@ -128,6 +148,12 @@ export interface CopilotBridge {
   /** Renderer -> main: a health event (sidecar exit / device loss / Soniox
    *  disconnect) to reflect as a banner. */
   onHealth(cb: (health: HealthMsg) => void): () => void
+  /** main -> renderer: the consent announcement script to render, and
+   *  whether the operator still needs to affirm before capture can start
+   *  (spec.md §4 item 2 / Plans.md Task 4.1). */
+  onConsentRequired(cb: (msg: ConsentRequiredMsg) => void): () => void
+  /** Renderer -> main: the operator affirms consent for this call. */
+  affirmConsent(): void
   /** Renderer -> main: subscription is live, safe to send hints now. */
   ready(): void
 }
