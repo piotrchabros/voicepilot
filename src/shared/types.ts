@@ -48,6 +48,8 @@ export interface InitMsg {
   /** Soniox API key. When set, the cloud Soniox engine replaces local zipformer. */
   readonly sonioxApiKey: string | null
   readonly sonioxLanguageHints: readonly string[]
+  /** Soniox WS endpoint (EU region, spec.md §4.1). Boot-asserted before use. */
+  readonly sonioxWsUrl: string
   readonly llamaBase: string
   readonly systemPrompt: string
   readonly staticContext: string

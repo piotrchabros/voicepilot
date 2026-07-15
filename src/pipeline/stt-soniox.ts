@@ -8,7 +8,9 @@ import type { SttEngine } from './stt-engine'
  * unaffected: audio streams to STT once regardless of how many hints we cancel.
  *
  * Protocol (soniox.com/docs/api-reference/stt/websocket-api):
- *   1. connect wss://stt-rt.soniox.com/transcribe-websocket
+ *   1. connect wss://stt-rt.eu.soniox.com/transcribe-websocket (EU region — see
+ *      spec.md §4.1; endpoint is config-driven and boot-asserted, never the
+ *      global host)
  *   2. first message = JSON config (api_key, model, raw PCM format...)
  *   3. then binary frames of pcm_s16le audio
  *   4. responses carry tokens; is_final tokens are append-once, non-final tokens
@@ -23,7 +25,36 @@ import type { SttEngine } from './stt-engine'
  * speech is lost.
  */
 
-const SONIOX_URL = 'wss://stt-rt.soniox.com/transcribe-websocket'
+/** The only endpoint host permitted by spec.md §4.1 (EU data residency). */
+const EU_SONIOX_HOST = 'stt-rt.eu.soniox.com'
+/** Default EU endpoint, used when no wsUrl is configured. */
+export const EU_SONIOX_WS_URL = `wss://${EU_SONIOX_HOST}/transcribe-websocket`
+
+/**
+ * Boot-time assertion (spec.md §4.1): refuses to start unless the resolved
+ * Soniox WS endpoint is the documented EU host over TLS. When `url` is
+ * absent/empty, defaults to the EU endpoint rather than silently allowing an
+ * unconfigured (and potentially global) endpoint through.
+ */
+export function assertEuEndpoint(url: string | undefined): string {
+  if (url === undefined || url.trim().length === 0) return EU_SONIOX_WS_URL
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(
+      `Invalid Soniox WS URL "${url}" — must be wss://${EU_SONIOX_HOST}/transcribe-websocket (spec.md §4.1, EU data residency).`
+    )
+  }
+  if (parsed.protocol !== 'wss:' || parsed.hostname !== EU_SONIOX_HOST) {
+    throw new Error(
+      `Refusing to start: Soniox WS endpoint "${url}" is not the documented EU host. ` +
+        `Set SONIOX_WS_URL to wss://${EU_SONIOX_HOST}/transcribe-websocket (spec.md §4.1, EU data residency).`
+    )
+  }
+  return url
+}
+
 const MODEL = 'stt-rt-v4'
 /** How long finish() waits for the finalize response before settling anyway. */
 const FINALIZE_GRACE_MS = 600
@@ -73,12 +104,15 @@ export class TokenTracker {
 
 export interface SonioxOptions {
   apiKey: string
+  /** Soniox WS endpoint. Defaults to (and is asserted against) the EU host. */
+  wsUrl?: string
   languageHints?: string[]
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void
 }
 
 export class SonioxStt implements SttEngine {
   private readonly opts: SonioxOptions
+  private readonly wsUrl: string
   private ws: WebSocket | null = null
   private open = false
   private connecting = false
@@ -93,6 +127,7 @@ export class SonioxStt implements SttEngine {
 
   constructor(opts: SonioxOptions) {
     this.opts = opts
+    this.wsUrl = assertEuEndpoint(opts.wsUrl)
     // Lazy: no connection until the first speech frame arrives.
     this.housekeeper = setInterval(() => this.housekeep(), 5_000)
   }
@@ -104,7 +139,7 @@ export class SonioxStt implements SttEngine {
   private connect(): void {
     if (this.closedForever || this.connecting || this.ws !== null) return
     this.connecting = true
-    const ws = new WebSocket(SONIOX_URL)
+    const ws = new WebSocket(this.wsUrl)
     this.ws = ws
 
     ws.on('open', () => {

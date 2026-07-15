@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { EU_SONIOX_WS_URL } from '../pipeline/stt-soniox'
 
 // Runtime paths, mirroring Main.java's `~/models` layout and the README.
 const MODELS = join(homedir(), 'models')
@@ -46,6 +47,18 @@ export function sonioxApiKey(): string | null {
 
 /** Transcript language hints for Soniox — Polish-first sales calls. */
 export const SONIOX_LANGUAGE_HINTS = ['pl', 'en'] as const
+
+/**
+ * Soniox WS endpoint (spec.md §4.1, EU data residency). Config-driven via
+ * SONIOX_WS_URL; defaults to the documented EU host when unset. The actual
+ * boot assertion (host allowlist + TLS) lives in stt-soniox.ts::assertEuEndpoint
+ * so it runs wherever a SonioxStt is constructed, not just here.
+ */
+export function sonioxWsUrl(): string {
+  const env = process.env['SONIOX_WS_URL']?.trim()
+  if (env !== undefined && env.length > 0) return env
+  return EU_SONIOX_WS_URL
+}
 
 export interface ModelReadiness {
   silero: boolean

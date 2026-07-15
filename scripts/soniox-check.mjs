@@ -39,7 +39,9 @@ while (off + 8 <= buf.length) {
 const pcm = buf.subarray(ds, Math.min(ds + dl, buf.length))
 console.log(`streaming ${wavPath} (${(pcm.length / 32000).toFixed(1)}s) to Soniox...`)
 
-const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket')
+const ws = new WebSocket(
+  process.env.SONIOX_WS_URL ?? 'wss://stt-rt.eu.soniox.com/transcribe-websocket'
+)
 let finals = ''
 let nonFinal = ''
 const t0 = Date.now()

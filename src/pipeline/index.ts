@@ -95,6 +95,7 @@ async function init(cfg: InitMsg): Promise<void> {
         cfg.sonioxApiKey !== null
           ? new SonioxStt({
               apiKey: cfg.sonioxApiKey,
+              wsUrl: cfg.sonioxWsUrl,
               languageHints: [...cfg.sonioxLanguageHints],
               onLog: (level, msg) => log(level, msg)
             })

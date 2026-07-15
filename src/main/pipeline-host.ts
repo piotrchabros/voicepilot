@@ -8,7 +8,8 @@ import {
   playbookPath,
   sidecarBinary,
   SONIOX_LANGUAGE_HINTS,
-  sonioxApiKey
+  sonioxApiKey,
+  sonioxWsUrl
 } from './config'
 import { LlamaSupervisor } from './llama-supervisor'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
@@ -95,6 +96,7 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       zipformerDir: paths.zipformer,
       sonioxApiKey: sonioxApiKey(),
       sonioxLanguageHints: SONIOX_LANGUAGE_HINTS,
+      sonioxWsUrl: sonioxWsUrl(),
       llamaBase: paths.llamaBase,
       systemPrompt: SYSTEM_PROMPT,
       staticContext: STATIC_CONTEXT,
