@@ -22,7 +22,7 @@ import { Playbook } from './playbook'
 import { SherpaStt } from './stt'
 import type { SttEngine } from './stt-engine'
 import { SonioxStt } from './stt-soniox'
-import { StageClock } from './timing'
+import { shouldBeginTurn, StageClock } from './timing'
 import { TranscriptState } from './transcript-state'
 import { SileroVad } from './vad'
 
@@ -195,8 +195,11 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
   // Only THEM triggers speculation (see below), so only THEM frames are worth
   // instrumenting — marking mic frames would just get overwritten/discarded.
   const isThem = leg.who === 'THEM'
-  if (isThem) clock.beginTurn('system')
   const ev = await leg.vad.accept(samples)
+  // Baseline resets ONLY on SPEECH_START (shouldBeginTurn) — resetting on
+  // every frame would wipe stt_interim's mark before the debounced
+  // speculate_fired/first_token land, misattributing them to a later frame.
+  if (isThem && shouldBeginTurn(ev)) clock.beginTurn('system')
   if (isThem) clock.mark('vad_out')
 
   if (DEBUG) {

@@ -3,8 +3,24 @@
 // side effects beyond the injected clock, so tests can drive it with a fake.
 
 import type { BenchStage, SuggestionTiming, SuggestionTransport } from '@shared/types'
+import type { VadEvent } from './vad'
 
 export type NowFn = () => number
+
+/**
+ * Whether a VAD event should (re)start the turn baseline. Only `SPEECH_START`
+ * qualifies — reviewer finding (Task 3.3, critical): calling `beginTurn` on
+ * every frame wipes the baseline mid-flight, between when `stt_interim` gets
+ * marked and when the debounced `speculate_fired`/`first_token` eventually
+ * fire, so those marks end up relative to a *different, later* frame than the
+ * one that actually triggered them. `SPEECH` (mid-turn) and `SILENCE`/
+ * `TURN_END` must never reset the baseline; only the frame that opens a new
+ * turn does. Extracted as a pure predicate so pipeline/index.ts and bench.ts
+ * share one gate and it's unit-testable without a live VAD/parentPort.
+ */
+export function shouldBeginTurn(ev: VadEvent): boolean {
+  return ev === 'SPEECH_START'
+}
 
 /** The stage-to-stage pairs the bench/latency report cares about, in pipeline
  *  order. `frame_in` is always 0 by construction (it IS the turn baseline). */

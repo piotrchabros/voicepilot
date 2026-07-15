@@ -5,7 +5,7 @@ import { HintEngine } from '../pipeline/hint-engine'
 import { LlamaClient } from '../pipeline/llama-client'
 import { Playbook } from '../pipeline/playbook'
 import { SherpaStt } from '../pipeline/stt'
-import { StageClock, stageDeltas } from '../pipeline/timing'
+import { shouldBeginTurn, StageClock, stageDeltas } from '../pipeline/timing'
 import { TranscriptState } from '../pipeline/transcript-state'
 import { SileroVad } from '../pipeline/vad'
 import { checkModels, paths, playbookDir } from './config'
@@ -90,8 +90,11 @@ export async function runBench(wav: string | undefined): Promise<void> {
   let frameCount = 0
   for await (const frame of streamFrames(wav, { realtime: true })) {
     frameCount++
-    clock.beginTurn('file')
     const ev = await vad.accept(frame.pcm)
+    // Baseline resets ONLY on SPEECH_START (shouldBeginTurn) — see
+    // pipeline/index.ts for why resetting on every frame corrupts
+    // speculate_fired/first_token attribution.
+    if (shouldBeginTurn(ev)) clock.beginTurn('file')
     clock.mark('vad_out')
 
     if (ev === 'SPEECH_START' || ev === 'SPEECH') {
@@ -122,7 +125,14 @@ function loadPlaybook(): Playbook {
 }
 
 /** Pure aggregation + print: exported so it can be unit-tested with fixture
- *  `SuggestionTiming[]` instead of a real model/wav run. */
+ *  `SuggestionTiming[]` instead of a real model/wav run.
+ *
+ *  Reviewer finding (Task 3.3, major): a bench run can carry more than one
+ *  transport (e.g. re-running --bench against wavs recorded from different
+ *  sources, or future multi-transport benches). Mixing transports into a
+ *  single joined tag per stage would silently average across sources with
+ *  different latency profiles. Bucket by (stage, transport) and print one
+ *  row per combination instead. */
 export function report(timings: readonly SuggestionTiming[]): void {
   console.log('\nstage boundary        n     p50(ms)   p95(ms)   transport')
   console.log('---------------------------------------------------------')
@@ -131,19 +141,24 @@ export function report(timings: readonly SuggestionTiming[]): void {
   for (const timing of timings) {
     transports.add(timing.transport)
     for (const delta of stageDeltas(timing)) {
-      const arr = buckets.get(delta.label) ?? []
+      const key = `${delta.label}::${delta.transport}`
+      const arr = buckets.get(key) ?? []
       arr.push(delta.ms)
-      buckets.set(delta.label, arr)
+      buckets.set(key, arr)
     }
   }
-  const transportTag = transports.size === 0 ? '—' : [...transports].sort().join(',')
+  // No timings at all: still print the table shape with an em-dash transport
+  // placeholder rather than emitting nothing.
+  const transportList = transports.size === 0 ? ['—'] : [...transports].sort()
   for (const [label, heading] of STAGE_ROWS) {
-    const xs = buckets.get(label) ?? []
-    const p50 = pct(xs, 50)
-    const p95 = pct(xs, 95)
-    console.log(
-      `${heading.padEnd(24)}${String(xs.length).padStart(4)}   ${fmt(p50).padStart(8)}  ${fmt(p95).padStart(8)}   ${transportTag}`
-    )
+    for (const transport of transportList) {
+      const xs = buckets.get(`${label}::${transport}`) ?? []
+      const p50 = pct(xs, 50)
+      const p95 = pct(xs, 95)
+      console.log(
+        `${heading.padEnd(24)}${String(xs.length).padStart(4)}   ${fmt(p50).padStart(8)}  ${fmt(p95).padStart(8)}   ${transport}`
+      )
+    }
   }
 }
 

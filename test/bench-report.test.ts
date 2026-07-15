@@ -65,13 +65,24 @@ describe('bench report() — Hint.timing-based aggregation with transport tag', 
     expect(table).toContain('—')
   })
 
-  it('mixed transports across timings are all reflected in the tag', () => {
+  it('mixed transports get separate (stage, transport) rows, never averaged together', () => {
     const timings: SuggestionTiming[] = [
       { transport: 'file', stages: { frame_in: 0, vad_out: 4 } },
       { transport: 'system', stages: { frame_in: 0, vad_out: 6 } }
     ]
     report(timings)
     const table = logs.join('\n')
-    expect(table).toContain('file,system')
+    // Never joins transports into a single tag on one row.
+    expect(table).not.toContain('file,system')
+
+    const vadRows = logs.filter((l) => l.includes('frame_in -> vad_out'))
+    expect(vadRows).toHaveLength(2)
+    const fileRow = vadRows.find((r) => r.trim().endsWith('file'))
+    const systemRow = vadRows.find((r) => r.trim().endsWith('system'))
+    expect(fileRow).toBeDefined()
+    expect(systemRow).toBeDefined()
+    // Each transport's own n=1 sample, not pooled n=2.
+    expect(fileRow).toMatch(/\b1\b/)
+    expect(systemRow).toMatch(/\b1\b/)
   })
 })
