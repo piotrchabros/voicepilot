@@ -7,7 +7,7 @@ const TSV = [
   'musze pogadac z zespolem\tKto jeszcze decyduje? Umow ich na call',
   'wyslij oferte\tNie wysylaj. Umow 15 min na przejscie przez nia',
   'nie mamy teraz budzetu\tKiedy planujecie budzet? Zapytaj o cykl',
-  'mamy juz dostawce\tCo bys zmienil w obecnym rozwiazaniu?',
+  'mamy juz dostawce\tCo bys zmienil w obecnym rozwiazaniu?'
 ].join('\n')
 
 describe('Playbook trigram matching (Polish inflection)', () => {

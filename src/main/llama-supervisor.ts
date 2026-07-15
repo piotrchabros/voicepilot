@@ -41,13 +41,20 @@ export class LlamaSupervisor {
   private spawn(): boolean {
     const bin = this.deps.binary ?? 'llama-server'
     const args = [
-      '-m', this.deps.modelPath,
-      '--host', '127.0.0.1',
-      '--port', String(new URL(this.deps.base).port || '8080'),
-      '--n-gpu-layers', '99', // Metal. Without this you're on CPU and it's over.
-      '--parallel', '1', // ONE slot. One slot = one KV cache = it stays warm.
-      '--ctx-size', '8192',
-      '--cache-reuse', '256', // reuse the cached prefix instead of re-prefilling
+      '-m',
+      this.deps.modelPath,
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(new URL(this.deps.base).port || '8080'),
+      '--n-gpu-layers',
+      '99', // Metal. Without this you're on CPU and it's over.
+      '--parallel',
+      '1', // ONE slot. One slot = one KV cache = it stays warm.
+      '--ctx-size',
+      '8192',
+      '--cache-reuse',
+      '256' // reuse the cached prefix instead of re-prefilling
     ]
     try {
       const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -61,7 +68,7 @@ export class LlamaSupervisor {
         this.deps.onLog(
           'error',
           `could not start llama-server (${bin}): ${err.message}. Install llama.cpp (brew install llama.cpp).`,
-          'llama-spawn',
+          'llama-spawn'
         )
       })
       proc.on('exit', (code) => {

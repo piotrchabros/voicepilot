@@ -61,7 +61,13 @@ export class Playbook {
 }
 
 function trigrams(s: string): Map<string, number> {
-  const n = ' ' + s.toLowerCase().replace(/[^\p{L}\p{Nd}]+/gu, ' ').trim() + ' '
+  const n =
+    ' ' +
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{Nd}]+/gu, ' ')
+      .trim() +
+    ' '
   const m = new Map<string, number>()
   for (let i = 0; i + 3 <= n.length; i++) {
     const g = n.substring(i, i + 3)

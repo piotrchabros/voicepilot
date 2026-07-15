@@ -26,7 +26,7 @@ class StubLlm implements HintLlm {
         rec.cancelled = true
       },
       done: Promise.resolve(),
-      isCancelled: () => rec.cancelled,
+      isCancelled: () => rec.cancelled
     }
   }
 }

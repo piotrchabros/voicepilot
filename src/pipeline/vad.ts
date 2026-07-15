@@ -46,7 +46,7 @@ export class SileroVad {
   static async create(modelPath: string): Promise<SileroVad> {
     const session = await InferenceSession.create(modelPath, {
       intraOpNumThreads: 1, // it's tiny; more threads is pure overhead
-      interOpNumThreads: 1,
+      interOpNumThreads: 1
     })
     return new SileroVad(session)
   }

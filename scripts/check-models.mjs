@@ -14,7 +14,7 @@ let ok = true
 try {
   const ort = require('onnxruntime-node')
   const s = await ort.InferenceSession.create(join(MODELS, 'silero_vad.onnx'), {
-    intraOpNumThreads: 1,
+    intraOpNumThreads: 1
   })
   console.log('✅ silero_vad.onnx loaded; inputs=', s.inputNames, 'outputs=', s.outputNames)
 } catch (e) {
@@ -32,15 +32,15 @@ try {
       transducer: {
         encoder: join(dir, 'encoder.onnx'),
         decoder: join(dir, 'decoder.onnx'),
-        joiner: join(dir, 'joiner.onnx'),
+        joiner: join(dir, 'joiner.onnx')
       },
       tokens: join(dir, 'tokens.txt'),
       numThreads: 2,
       provider: 'cpu',
-      debug: 0,
+      debug: 0
     },
     decodingMethod: 'greedy_search',
-    enableEndpoint: false,
+    enableEndpoint: false
   })
   const stream = rec.createStream()
   // Feed a little silence to make sure the graph runs end to end.

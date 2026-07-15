@@ -34,9 +34,12 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       !models.silero && 'silero_vad.onnx',
       !models.soniox &&
         !models.zipformer &&
-        'STT: SONIOX_API_KEY (or .soniox-key) or zipformer-streaming/ models',
+        'STT: SONIOX_API_KEY (or .soniox-key) or zipformer-streaming/ models'
     ].filter(Boolean)
-    log('warn', `missing in ${paths.models}: ${missing.join(', ')} — pipeline idle. See README step 2.`)
+    log(
+      'warn',
+      `missing in ${paths.models}: ${missing.join(', ')} — pipeline idle. See README step 2.`
+    )
     // Still return a handle; the overlay runs standalone.
     return { shutdown: () => {} }
   }
@@ -45,7 +48,7 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
   // 1. Spawn the pipeline utilityProcess.
   const child: UtilityProcess = utilityProcess.fork(join(__dirname, 'pipeline.js'), [], {
     serviceName: 'copilot-pipeline',
-    stdio: 'inherit',
+    stdio: 'inherit'
   })
 
   child.on('message', (msg: FromPipeline) => {
@@ -66,7 +69,11 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
   })
 
   // 2. Supervise llama-server (spawn if needed, poll /health), then init pipeline.
-  const llama = new LlamaSupervisor({ base: paths.llamaBase, modelPath: paths.gguf, onLog: (l, m, _c) => log(l as LogMsg['level'], m) })
+  const llama = new LlamaSupervisor({
+    base: paths.llamaBase,
+    modelPath: paths.gguf,
+    onLog: (l, m, _c) => log(l as LogMsg['level'], m)
+  })
 
   child.once('spawn', () => {
     let playbookTsv = ''
@@ -86,7 +93,7 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       staticContext: STATIC_CONTEXT,
       playbookTsv,
       maxTurns: MAX_TURNS,
-      bench: false,
+      bench: false
     }
     // Bring llama up before the pipeline warms its prefix against it.
     void llama.ensure().then((ok) => {
@@ -105,7 +112,7 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       child.postMessage({ type: 'frame', leg, samples })
     },
     onLog: (level, msg, code) => log(level as LogMsg['level'], code ? `[${code}] ${msg}` : msg),
-    onExit: (code) => log(code === 0 ? 'info' : 'warn', `capture sidecar exited (${code})`),
+    onExit: (code) => log(code === 0 ? 'info' : 'warn', `capture sidecar exited (${code})`)
   })
   const started = sidecar.start()
   if (!started) log('warn', 'capture sidecar not started — no audio input')
@@ -120,6 +127,6 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       }
       child.kill()
       llama.stop()
-    },
+    }
   }
 }

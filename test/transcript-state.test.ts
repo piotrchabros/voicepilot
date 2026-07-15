@@ -58,7 +58,7 @@ describe('TranscriptState prefix stability (the important one)', () => {
     s.settle('THEM', 'pytanie')
     s.settle('ME', 'odpowiedz')
     expect(s.renderPrompt()).toBe(
-      `${SYSTEM}\n\n${PLAYBOOK}\n\n<transcript>\nThem: pytanie\nMe: odpowiedz\n</transcript>\n\n<hint>`,
+      `${SYSTEM}\n\n${PLAYBOOK}\n\n<transcript>\nThem: pytanie\nMe: odpowiedz\n</transcript>\n\n<hint>`
     )
   })
 

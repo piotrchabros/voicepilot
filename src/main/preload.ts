@@ -11,7 +11,7 @@ const bridge: CopilotBridge = {
   },
   ready(): void {
     ipcRenderer.send('overlay:ready')
-  },
+  }
 }
 
 contextBridge.exposeInMainWorld('copilot', bridge)

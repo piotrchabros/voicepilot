@@ -11,7 +11,7 @@ export const paths = {
   silero: join(MODELS, 'silero_vad.onnx'),
   zipformer: join(MODELS, 'zipformer-streaming'),
   gguf: join(MODELS, 'Qwen3-4B-Instruct-Q4_K_M.gguf'),
-  llamaBase: 'http://127.0.0.1:8080',
+  llamaBase: 'http://127.0.0.1:8080'
 } as const
 
 /** The capture sidecar binary, whether running packaged or from source. */

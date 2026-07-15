@@ -22,7 +22,7 @@ const INTERIMS = [
   'to jest dla nas za drogo w tym',
   'to jest dla nas za drogo w tym kwartale',
   'to jest dla nas za drogo w tym kwartale i musimy',
-  'to jest dla nas za drogo w tym kwartale i musimy pogadac z zespolem',
+  'to jest dla nas za drogo w tym kwartale i musimy pogadac z zespolem'
 ]
 
 export async function runTtft(): Promise<void> {
@@ -62,10 +62,14 @@ export async function runTtft(): Promise<void> {
   console.log('\n----------------------------------------------')
   if (aP50 < 100) {
     console.log(`GATE 2 PASS ✅  append-only p50 TTFT = ${aP50.toFixed(1)}ms (< 100ms)`)
-    console.log(`prefix cache is working: control is ${(bMed / Math.max(aP50, 0.1)).toFixed(1)}× slower.`)
+    console.log(
+      `prefix cache is working: control is ${(bMed / Math.max(aP50, 0.1)).toFixed(1)}× slower.`
+    )
   } else {
     console.log(`GATE 2 FAIL ❌  append-only p50 TTFT = ${aP50.toFixed(1)}ms (>= 100ms)`)
-    console.log('the prefix cache is not helping — something mutates the prompt prefix. Investigate.')
+    console.log(
+      'the prefix cache is not helping — something mutates the prompt prefix. Investigate.'
+    )
   }
 }
 
@@ -75,7 +79,7 @@ async function measureTtft(llm: LlamaClient, prompt: string): Promise<number> {
   const gen = llm.streamHint(prompt, () => {}, {
     onFirstToken: () => {
       ttft = performance.now() - t0
-    },
+    }
   })
   await gen.done
   return Number.isNaN(ttft) ? performance.now() - t0 : ttft

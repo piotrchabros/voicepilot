@@ -30,8 +30,8 @@ function createOverlay(): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false,
-    },
+      nodeIntegration: false
+    }
   })
 
   // THE reason for this port: hide the overlay from screen share / recording.
@@ -50,13 +50,13 @@ function createOverlay(): BrowserWindow {
 
   // Diagnostics (surface renderer errors + confirm the window is where we think).
   win.webContents.on('console-message', (_e, _level, message) =>
-    console.log(`[renderer] ${message}`),
+    console.log(`[renderer] ${message}`)
   )
   win.webContents.on('did-fail-load', (_e, code, desc) =>
-    console.log(`[did-fail-load] ${code} ${desc}`),
+    console.log(`[did-fail-load] ${code} ${desc}`)
   )
   win.webContents.on('did-finish-load', () =>
-    console.log(`[did-finish-load] bounds=${JSON.stringify(win.getBounds())}`),
+    console.log(`[did-finish-load] bounds=${JSON.stringify(win.getBounds())}`)
   )
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -108,9 +108,11 @@ if (argv.includes('--list-devices')) {
           "Let's explore a phased rollout instead",
           'What benefits do you get from them?',
           'When can I meet your team?',
-          "What's included in the offer?",
+          "What's included in the offer?"
         ]
-        demo.forEach((text, i) => setTimeout(() => paint({ text, source: 'GENERATED' }), 800 + i * 2500))
+        demo.forEach((text, i) =>
+          setTimeout(() => paint({ text, source: 'GENERATED' }), 800 + i * 2500)
+        )
         return
       }
       // Dev aid: with no models/llama yet, show a placeholder so the Step-1
@@ -123,7 +125,7 @@ if (argv.includes('--list-devices')) {
 
     pipeline = startPipeline({
       onHint: paint,
-      onLog: (l) => console.log(`[pipeline:${l.level}] ${l.msg}`),
+      onLog: (l) => console.log(`[pipeline:${l.level}] ${l.msg}`)
     })
 
     app.on('activate', () => {

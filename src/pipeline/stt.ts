@@ -26,17 +26,17 @@ export class SherpaStt implements SttEngine {
         transducer: {
           encoder: `${modelDir}/encoder.onnx`,
           decoder: `${modelDir}/decoder.onnx`,
-          joiner: `${modelDir}/joiner.onnx`,
+          joiner: `${modelDir}/joiner.onnx`
         },
         tokens: `${modelDir}/tokens.txt`,
         numThreads: 2,
         provider: 'cpu',
-        debug: 0,
+        debug: 0
       },
       decodingMethod: 'greedy_search',
       // Let Silero own endpointing. Two components racing to decide when the turn
       // ended is a bug you'll spend a week not finding.
-      enableEndpoint: false,
+      enableEndpoint: false
     })
     this.stream = this.recognizer.createStream()
   }

@@ -57,7 +57,7 @@ export class LlamaClient {
       n_predict: 24, // hints are <=10 words; don't let it ramble
       temperature: 0.3,
       top_p: 0.9,
-      stop: ['\n', '</hint>'],
+      stop: ['\n', '</hint>']
     }
 
     const done = this.run(body, onToken, controller.signal, () => cancelled, opts).catch(() => {
@@ -71,7 +71,7 @@ export class LlamaClient {
         controller.abort()
       },
       done,
-      isCancelled: () => cancelled,
+      isCancelled: () => cancelled
     }
   }
 
@@ -80,13 +80,13 @@ export class LlamaClient {
     onToken: (tok: string) => void,
     signal: AbortSignal,
     isCancelled: () => boolean,
-    opts: StreamOptions,
+    opts: StreamOptions
   ): Promise<void> {
     const res = await fetch(`${this.base}/completion`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal,
+      signal
     })
     if (!res.ok || res.body === null) {
       throw new Error(`llama-server /completion -> ${res.status}`)

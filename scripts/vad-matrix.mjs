@@ -8,11 +8,17 @@ const require = createRequire(import.meta.url)
 const ort = require('onnxruntime-node')
 
 const buf = readFileSync(process.argv[2] ?? '/tmp/say.wav')
-let ds = 12, dl = 0, off = 12
+let ds = 12,
+  dl = 0,
+  off = 12
 while (off + 8 <= buf.length) {
   const id = buf.toString('ascii', off, off + 4)
   const size = buf.readUInt32LE(off + 4)
-  if (id === 'data') { ds = off + 8; dl = size; break }
+  if (id === 'data') {
+    ds = off + 8
+    dl = size
+    break
+  }
   off += 8 + size + (size % 2)
 }
 const n = Math.min(dl, buf.length - ds) >> 1
@@ -31,8 +37,11 @@ async function run(amp, srDims) {
     const input = new ort.Tensor('float32', f, [1, 512])
     const st = new ort.Tensor('float32', state, [2, 1, 128])
     let out
-    try { out = await session.run({ input, state: st, sr }) }
-    catch (e) { return `ERROR: ${e.message}` }
+    try {
+      out = await session.run({ input, state: st, sr })
+    } catch (e) {
+      return `ERROR: ${e.message}`
+    }
     const [pn, sn] = session.outputNames
     const p = out[pn].data[0]
     state = out[sn].data

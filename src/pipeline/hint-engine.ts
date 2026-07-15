@@ -44,7 +44,12 @@ export class HintEngine {
   /** Fired on the first generated token of a speculation — for the bench. */
   onFirstToken?: () => void
 
-  constructor(llm: HintLlm, playbook: Playbook, state: TranscriptState, sink: (hint: Hint) => void) {
+  constructor(
+    llm: HintLlm,
+    playbook: Playbook,
+    state: TranscriptState,
+    sink: (hint: Hint) => void
+  ) {
     this.llm = llm
     this.playbook = playbook
     this.state = state
@@ -91,7 +96,7 @@ export class HintEngine {
         // Whitespace-only accumulations are noise, not a hint — don't paint them.
         if (text.length > 0) this.sink({ text, source: 'GENERATED' })
       },
-      { onFirstToken: () => this.onFirstToken?.() },
+      { onFirstToken: () => this.onFirstToken?.() }
     )
     this.inFlight = gen
 

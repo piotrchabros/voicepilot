@@ -17,7 +17,9 @@ function makeWavPcm16(samples: number[], sampleRate = 16000, channels = 1): Buff
   buf.writeUInt16LE(16, 34)
   buf.write('data', 36, 'ascii')
   buf.writeUInt32LE(dataLen, 40)
-  samples.forEach((s, i) => buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(s * 32768))), 44 + i * 2))
+  samples.forEach((s, i) =>
+    buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(s * 32768))), 44 + i * 2)
+  )
   return buf
 }
 

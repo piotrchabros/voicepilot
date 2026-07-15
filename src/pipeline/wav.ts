@@ -49,7 +49,7 @@ function decodeSamples(
   start: number,
   end: number,
   audioFormat: number,
-  bits: number,
+  bits: number
 ): Float32Array {
   if (audioFormat === 3 && bits === 32) {
     const n = (end - start) >> 2

@@ -8,11 +8,17 @@ const require = createRequire(import.meta.url)
 const sherpa = require('sherpa-onnx-node')
 
 const buf = readFileSync(process.argv[2] ?? '/tmp/say.wav')
-let ds = 12, dl = 0, off = 12
+let ds = 12,
+  dl = 0,
+  off = 12
 while (off + 8 <= buf.length) {
   const id = buf.toString('ascii', off, off + 4)
   const size = buf.readUInt32LE(off + 4)
-  if (id === 'data') { ds = off + 8; dl = size; break }
+  if (id === 'data') {
+    ds = off + 8
+    dl = size
+    break
+  }
   off += 8 + size + (size % 2)
 }
 const n = Math.min(dl, buf.length - ds) >> 1
@@ -26,14 +32,14 @@ const vad = new sherpa.Vad(
       threshold: 0.5,
       minSilenceDuration: 0.25,
       minSpeechDuration: 0.1,
-      windowSize: 512,
+      windowSize: 512
     },
     sampleRate: 16000,
     numThreads: 1,
     provider: 'cpu',
-    debug: 0,
+    debug: 0
   },
-  30,
+  30
 )
 
 const WIN = 512
@@ -43,8 +49,14 @@ for (let o = 0; o + WIN <= n; o += WIN) {
   while (!vad.isEmpty()) {
     const seg = vad.front()
     segments++
-    console.log(`segment ${segments}: start≈${(seg.start / 16000).toFixed(2)}s len≈${(seg.samples.length / 16000).toFixed(2)}s`)
+    console.log(
+      `segment ${segments}: start≈${(seg.start / 16000).toFixed(2)}s len≈${(seg.samples.length / 16000).toFixed(2)}s`
+    )
     vad.pop()
   }
 }
-console.log(segments > 0 ? `\n✅ sherpa Vad detected ${segments} speech segment(s) — MODEL IS GOOD` : '\n❌ sherpa Vad found no speech either — model/file problem')
+console.log(
+  segments > 0
+    ? `\n✅ sherpa Vad detected ${segments} speech segment(s) — MODEL IS GOOD`
+    : '\n❌ sherpa Vad found no speech either — model/file problem'
+)

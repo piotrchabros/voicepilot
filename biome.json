@@ -7,7 +7,17 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["src/**", "test/**", "scripts/**", "!out", "!node_modules", "!native", "!openwiki"]
+    "includes": [
+      "src/**",
+      "test/**",
+      "scripts/**",
+      "!out",
+      "!node_modules",
+      "!native",
+      "!openwiki",
+      "!.harness-worktrees",
+      "!.wt"
+    ]
   },
   "formatter": {
     "enabled": true,

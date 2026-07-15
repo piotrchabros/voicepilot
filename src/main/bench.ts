@@ -27,17 +27,23 @@ export async function runBench(wav: string | undefined): Promise<void> {
   }
   const models = checkModels()
   if (!models.silero || !models.zipformer) {
-    console.error(`models missing in ${paths.models}: need silero_vad.onnx + zipformer-streaming/. See README step 2.`)
+    console.error(
+      `models missing in ${paths.models}: need silero_vad.onnx + zipformer-streaming/. See README step 2.`
+    )
     return
   }
 
   const mono = toMono16k(parseWav(readFileSync(wav)))
   const frames = toFrames(mono)
-  console.log(`bench: ${wav} -> ${frames.length} frames (${(frames.length * FRAME_MS) / 1000}s @16k mono)`)
+  console.log(
+    `bench: ${wav} -> ${frames.length} frames (${(frames.length * FRAME_MS) / 1000}s @16k mono)`
+  )
 
   const llm = new LlamaClient(paths.llamaBase)
   if (!(await llm.health())) {
-    console.warn(`warning: llama-server not answering at ${paths.llamaBase}/health — ttft/paint stages will be empty.`)
+    console.warn(
+      `warning: llama-server not answering at ${paths.llamaBase}/health — ttft/paint stages will be empty.`
+    )
   }
 
   const playbook = loadPlaybook()
@@ -119,14 +125,14 @@ function report(samples: Record<Stage, number[]>): void {
     stt: 'vad_out -> stt_interim',
     speculate: 'stt_interim -> speculate',
     ttft: 'speculate -> first_token',
-    paint: 'first_token -> painted',
+    paint: 'first_token -> painted'
   }
   for (const stage of STAGES) {
     const xs = samples[stage]
     const p50 = pct(xs, 50)
     const p95 = pct(xs, 95)
     console.log(
-      `${labels[stage].padEnd(24)}${String(xs.length).padStart(4)}   ${fmt(p50).padStart(8)}  ${fmt(p95).padStart(8)}`,
+      `${labels[stage].padEnd(24)}${String(xs.length).padStart(4)}   ${fmt(p50).padStart(8)}  ${fmt(p95).padStart(8)}`
     )
   }
 }

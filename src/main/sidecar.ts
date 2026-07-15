@@ -28,7 +28,7 @@ export class Sidecar {
       this.deps.onLog(
         'error',
         `capture sidecar not built at ${this.deps.binary} — run: npm run sidecar`,
-        'sidecar-missing',
+        'sidecar-missing'
       )
       return false
     }

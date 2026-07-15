@@ -28,10 +28,12 @@ while (off + 8 <= buf.length) {
 const n = Math.min(dataLen, buf.length - dataStart) >> 1
 const samples = new Float32Array(n)
 for (let i = 0; i < n; i++) samples[i] = buf.readInt16LE(dataStart + i * 2) / 32768
-console.log(`loaded ${wavPath}: ${n} samples, mean|amp|=${(samples.reduce((a, b) => a + Math.abs(b), 0) / n).toFixed(4)}`)
+console.log(
+  `loaded ${wavPath}: ${n} samples, mean|amp|=${(samples.reduce((a, b) => a + Math.abs(b), 0) / n).toFixed(4)}`
+)
 
 const session = await ort.InferenceSession.create(join(homedir(), 'models', 'silero_vad.onnx'), {
-  intraOpNumThreads: 1,
+  intraOpNumThreads: 1
 })
 console.log('outputs:', session.outputNames)
 
@@ -55,5 +57,15 @@ for (let o = 0; o + 512 <= n; o += 512) {
 }
 
 console.log(`frames=${probs.length} maxProb=${maxProb.toFixed(3)} framesOver0.5=${framesOverHalf}`)
-console.log('first 20 probs:', probs.slice(0, 20).map((p) => p.toFixed(2)).join(' '))
-console.log(maxProb >= 0.5 ? '\n✅ VAD DETECTS SPEECH — inference path works' : '\n❌ VAD never crosses 0.5 — VAD inference is broken')
+console.log(
+  'first 20 probs:',
+  probs
+    .slice(0, 20)
+    .map((p) => p.toFixed(2))
+    .join(' ')
+)
+console.log(
+  maxProb >= 0.5
+    ? '\n✅ VAD DETECTS SPEECH — inference path works'
+    : '\n❌ VAD never crosses 0.5 — VAD inference is broken'
+)

@@ -27,8 +27,8 @@ async function hint(themLine) {
       n_predict: 24,
       temperature: 0.3,
       top_p: 0.9,
-      stop: ['\n', '</hint>'],
-    }),
+      stop: ['\n', '</hint>']
+    })
   })
   const j = await res.json()
   return (j.content ?? '').trim()
@@ -38,7 +38,7 @@ const objections = [
   'this is way too expensive for our budget right now',
   'we already have a supplier we are happy with',
   'I need to talk to my team before deciding',
-  'just send me the offer and I will look at it',
+  'just send me the offer and I will look at it'
 ]
 
 for (const o of objections) {

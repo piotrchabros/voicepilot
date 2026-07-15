@@ -84,6 +84,11 @@ npm run lint          # biome check . — formatter + linter, exit 0 required
 npm run format:check  # biome format . — formatting only, no writes
 ```
 
+`noExplicitAny` and `noNonNullAssertion` are off because this codebase leans on
+`any`/`!` at native-binding boundaries (sherpa-onnx-node, onnxruntime-node) where
+TypeScript can't see the real shape — banning them would just relocate the
+unsafety behind `as any` casts, not remove it.
+
 ## Measure before you optimise
 
 Log a timestamp at each stage boundary and print the p50/p95. Everything about

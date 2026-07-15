@@ -23,7 +23,7 @@ describe('SileroVad hysteresis + hangover', () => {
     const hangoverFrames = Math.floor(HANGOVER_MS / FRAME_MS) // 7
     const silence = run(
       vad,
-      Array.from({ length: hangoverFrames }, () => 0.1),
+      Array.from({ length: hangoverFrames }, () => 0.1)
     )
     // First hangoverFrames-1 are SPEECH, the last is TURN_END.
     expect(silence.slice(0, hangoverFrames - 1).every((e) => e === 'SPEECH')).toBe(true)
@@ -40,7 +40,7 @@ describe('SileroVad hysteresis + hangover', () => {
     const hangoverFrames = Math.floor(HANGOVER_MS / FRAME_MS)
     const tail = run(
       vad,
-      Array.from({ length: hangoverFrames }, () => 0.0),
+      Array.from({ length: hangoverFrames }, () => 0.0)
     )
     expect(tail[hangoverFrames - 1]).toBe('TURN_END')
   })
