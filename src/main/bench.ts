@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { FRAME_MS } from '@shared/types'
+import { streamFrames } from '../pipeline/frame-stream'
 import { HintEngine } from '../pipeline/hint-engine'
 import { LlamaClient } from '../pipeline/llama-client'
 import { Playbook } from '../pipeline/playbook'
@@ -81,24 +82,26 @@ export async function runBench(wav: string | undefined): Promise<void> {
 
   await llm.warm(SYSTEM_PROMPT)
 
-  for (const frame of frames) {
+  // Frames are supplied by `FileAudioSource` (via the pure `streamFrames`
+  // wrapper) at their natural 32ms cadence, so the 200ms debounce and the
+  // llama slot behave the way they would on a live call.
+  for await (const frame of streamFrames(wav, { realtime: true })) {
     const t0 = now()
-    const ev = await vad.accept(frame)
+    const ev = await vad.accept(frame.pcm)
     samples.vad.push(now() - t0)
 
     if (ev === 'SPEECH_START' || ev === 'SPEECH') {
       const t1 = now()
-      stt.accept(frame)
+      stt.accept(frame.pcm)
       const interim = stt.interim()
       samples.stt.push(now() - t1)
       state.live('THEM', interim)
       lastInterimAt = now()
       engine.onTranscriptUpdate()
     } else if (ev === 'TURN_END') {
-      stt.accept(frame)
+      stt.accept(frame.pcm)
       engine.onTurnEnd('THEM', await stt.finish())
     }
-    await delay(FRAME_MS)
   }
 
   // Let the last in-flight speculation land.
