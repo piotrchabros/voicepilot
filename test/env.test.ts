@@ -59,6 +59,30 @@ describe('validateEnv', () => {
     expect(validateEnv(raw)).toEqual({})
   })
 
+  it('accepts a valid LLM_API_URL (https://) and LLM_API_KEY', () => {
+    const raw = {
+      LLM_API_URL: 'https://llm-eu.example.com/v1/analyze',
+      LLM_API_KEY: 'sk-1234567890',
+      LLM_DEPLOYMENT_CLASS: 'eu-central-1',
+      LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com'
+    }
+    expect(validateEnv(raw)).toEqual(raw)
+  })
+
+  it('rejects a plain http:// LLM_API_URL — https is enforced at parse time (spec.md §4 item 8)', () => {
+    expect(() => validateEnv({ LLM_API_URL: 'http://llm-eu.example.com/v1/analyze' })).toThrow(
+      /LLM_API_URL/
+    )
+  })
+
+  it('rejects a too-short LLM_API_KEY', () => {
+    expect(() => validateEnv({ LLM_API_KEY: 'short' })).toThrow(/LLM_API_KEY/)
+  })
+
+  it('treats a blank LLM_API_URL as unset, same as the other optional fields', () => {
+    expect(validateEnv({ LLM_API_URL: '   ' })).toEqual({})
+  })
+
   it('reports every offending variable in one throw, not just the first', () => {
     expect.assertions(2)
     try {

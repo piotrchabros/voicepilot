@@ -40,7 +40,30 @@ const envSchema = z.object({
    * format constraint here beyond "not blank", since the real text's shape
    * isn't this schema's business.
    */
-  CONSENT_ANNOUNCEMENT_PL: z.string().optional()
+  CONSENT_ANNOUNCEMENT_PL: z.string().optional(),
+  /**
+   * Cloud analysis LLM (spec.md §4 item 8, Plans.md Task 6.3) — a second data
+   * processor, off by default. Validation here is deliberately format-only,
+   * same split as SONIOX_WS_URL above: the EU-allowlist/deployment-class
+   * boot assertion (spec.md §4 item 8) is
+   * `resolveCloudLlmConfig`/`assertEuLlmEndpoint`'s job
+   * (src/pipeline/cloud-llm-client.ts), not this schema's. LLM_API_URL being
+   * unset means the feature is simply unavailable — boot proceeds normally.
+   */
+  LLM_API_URL: z
+    .string()
+    .trim()
+    .regex(/^https:\/\//, 'must be an https:// URL (EU allowlist is enforced separately)')
+    .optional(),
+  LLM_API_KEY: z
+    .string()
+    .trim()
+    .min(10, 'must be at least 10 characters (looks truncated/placeholder)')
+    .optional(),
+  /** Vendor-specific region/deployment identifier (e.g. "eu-central-1", "EU Data Zone"). */
+  LLM_DEPLOYMENT_CLASS: z.string().trim().optional(),
+  /** Comma-separated EU hostname allowlist, e.g. "llm-eu.example.com,other-eu.example.com". */
+  LLM_EU_HOST_ALLOWLIST: z.string().trim().optional()
 })
 
 export type Env = z.infer<typeof envSchema>
