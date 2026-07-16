@@ -79,3 +79,70 @@ describe('TranscriptState prefix stability (the important one)', () => {
     expect(s.retrievalKey()).toBe('')
   })
 })
+
+describe('TranscriptState.renderRollingWindow() (spec.md §3 stateless-cloud escape hatch)', () => {
+  it('renders all settled turns, speaker-labelled, most recent last, when under the bound', () => {
+    const s = fresh()
+    s.settle('THEM', 'ile to kosztuje')
+    s.settle('ME', 'zalezy od zakresu')
+    s.settle('THEM', 'za drogo')
+
+    const { text, asOfTurn } = s.renderRollingWindow({ maxTurns: 5 })
+
+    expect(text).toBe('Them: ile to kosztuje\nMe: zalezy od zakresu\nThem: za drogo\n')
+    expect(asOfTurn).toBe(3)
+  })
+
+  it('caps to only the last N turns when more turns exist than the bound', () => {
+    const s = fresh(20)
+    s.settle('THEM', 'turn1')
+    s.settle('ME', 'turn2')
+    s.settle('THEM', 'turn3')
+    s.settle('ME', 'turn4')
+    s.settle('THEM', 'turn5')
+
+    const { text, asOfTurn } = s.renderRollingWindow({ maxTurns: 2 })
+
+    expect(text).toBe('Me: turn4\nThem: turn5\n')
+    expect(text).not.toContain('turn1')
+    expect(text).not.toContain('turn3')
+    expect(asOfTurn).toBe(5)
+  })
+
+  it('falls back to the instance maxTurns bound when no override is given', () => {
+    const s = fresh(2)
+    s.settle('THEM', 'a')
+    s.settle('ME', 'b')
+    s.settle('THEM', 'c')
+
+    const { text } = s.renderRollingWindow()
+
+    expect(text).toBe('Me: b\nThem: c\n')
+  })
+
+  it('is byte-identical to renderPrompt() output before and after being called (no shared mutable state)', () => {
+    const s = fresh()
+    s.settle('THEM', 'ile to kosztuje')
+    s.settle('ME', 'zalezy od zakresu')
+    s.live('THEM', 'za dro')
+
+    const before = s.renderPrompt()
+    s.renderRollingWindow({ maxTurns: 1 })
+    s.renderRollingWindow()
+    const after = s.renderPrompt()
+
+    expect(after).toBe(before)
+  })
+
+  it('does not disturb subsequent settle()/live() calls or the settled prefix invariant', () => {
+    const s = fresh()
+    s.settle('THEM', 'dzien dobry')
+    s.settle('ME', 'witam')
+    const base = settledPrefix(s.renderPrompt())
+
+    s.renderRollingWindow({ maxTurns: 1 })
+    s.settle('THEM', 'za drogo')
+
+    expect(s.renderPrompt().startsWith(base)).toBe(true)
+  })
+})

@@ -26,6 +26,14 @@ function renderTurn(t: Turn): string {
   return (t.speaker === 'ME' ? 'Me: ' : 'Them: ') + t.text + '\n'
 }
 
+/** Result of {@link TranscriptState.renderRollingWindow}. */
+export interface RollingWindowResult {
+  /** Speaker-labelled turns, most recent last. Plain text, no system/playbook wrapper. */
+  readonly text: string
+  /** Count of settled turns currently held, so callers can stamp "as of turn N". */
+  readonly asOfTurn: number
+}
+
 export class TranscriptState {
   private readonly systemPrompt: string
   private readonly playbook: string
@@ -87,5 +95,22 @@ export class TranscriptState {
   /** Cheap retrieval key: what they're saying right now. */
   retrievalKey(): string {
     return this.liveSpeaker === 'THEM' ? this.liveTextValue : ''
+  }
+
+  /**
+   * Rolling-window renderer for stateless cloud generation calls only
+   * (spec.md §3: "Rolling-window rendering may be used only for stateless
+   * cloud generation calls"). This is a separate read path from
+   * {@link renderPrompt}: it does not touch or share the append-only,
+   * prefix-cache-locked `settled` array, and calling it never mutates any
+   * TranscriptState field. `renderPrompt()`'s output is unaffected by any
+   * number of calls to this method.
+   */
+  renderRollingWindow(opts: { maxTurns?: number } = {}): RollingWindowResult {
+    const bound = opts.maxTurns ?? this.maxTurns
+    const window = bound > 0 ? this.settled.slice(-bound) : []
+    let text = ''
+    for (const t of window) text += renderTurn(t)
+    return { text, asOfTurn: this.settled.length }
   }
 }
