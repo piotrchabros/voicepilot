@@ -12,7 +12,7 @@ import {
   sonioxApiKey,
   sonioxWsUrl
 } from './config'
-import { type ConsentGate, wireCaptureStart } from './consent'
+import { type ConsentGate, resolveInitCustomerBrief, wireCaptureStart } from './consent'
 import { audioEndToHealthMsg, audioHealthToMsg } from './health-events'
 import { LlamaSupervisor } from './llama-supervisor'
 import { MAX_TURNS, STATIC_CONTEXT, SYSTEM_PROMPT } from './prompts'
@@ -37,6 +37,12 @@ export interface PipelineDeps {
    *  4.1): `audioSource.start()` below is held behind `consentGate.onAffirmed`
    *  — capture must never start before the operator affirms, per call. */
   consentGate: ConsentGate
+  /** Operator-selected customer-brief basename at the moment InitMsg is
+   *  built, or `null` for "none" (spec.md §7, Plans.md Task 6.7). A getter
+   *  (not a value) because init is constructed asynchronously after
+   *  `child.once('spawn')`/`llama.ensure()`, by which point the operator may
+   *  have already affirmed consent with a selection. */
+  getCustomerBrief: () => string | null
 }
 
 export interface PipelineHandle {
@@ -108,6 +114,11 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       log('warn', `playbook/ not found at ${playbookYaml} — retrieval layer disabled`)
       playbookYaml = ''
     }
+    // exactOptionalPropertyTypes: `undefined` is not assignable to an
+    // optional `string` field — spread it in only when a brief was
+    // selected, so "none" (the default) omits the key entirely rather than
+    // setting it to undefined (Plans.md Task 6.7).
+    const customerBrief = resolveInitCustomerBrief(deps.getCustomerBrief())
     const init: InitMsg = {
       type: 'init',
       sileroPath: paths.silero,
@@ -120,7 +131,8 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       staticContext: STATIC_CONTEXT,
       playbookYaml,
       maxTurns: MAX_TURNS,
-      bench: false
+      bench: false,
+      ...(customerBrief !== undefined && { customerBrief })
     }
     // Bring llama up before the pipeline warms its prefix against it.
     void llama.ensure().then((ok) => {

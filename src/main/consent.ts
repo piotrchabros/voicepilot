@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { ConsentState } from '@shared/types'
 
 /**
@@ -18,10 +18,57 @@ import type { ConsentState } from '@shared/types'
 // renderer-side, and ConsentRequiredMsg on the wire).
 export type { ConsentState } from '@shared/types'
 
-/** What gets logged on affirmation. Timestamp + session id only — no call content. */
+/**
+ * Processor set covered by a consent affirmation (spec.md §4 item 8): the
+ * second data processor (cloud analysis LLM) is a legal boundary — an old
+ * affirmation must not silently cover a new data flow, so the record states
+ * exactly what was affirmed. `soniox+llm` today means "a customer brief was
+ * selected"; TODO(6.4) OR-in the cloud-analysis feature flag once it lands
+ * so a brief-less call with cloud analysis enabled also affirms `soniox+llm`
+ * (Plans.md Task 6.7 / spec.md §7).
+ */
+export type ProcessorSet = 'soniox' | 'soniox+llm'
+
+/** See {@link ProcessorSet} — `hasBrief` is whether a customer brief was
+ *  selected on the pre-Start consent screen (Plans.md Task 6.7). */
+export function processorSetFor(hasBrief: boolean): ProcessorSet {
+  return hasBrief ? 'soniox+llm' : 'soniox'
+}
+
+/**
+ * Maps an operator's pre-Start customer-brief dropdown selection to
+ * `InitMsg.customerBrief` (Plans.md Task 6.7): "none" (`null`, the default)
+ * must not surface as an empty-string field — it's simply absent, matching
+ * InitMsg's optional-field contract. A selected name passes through
+ * unchanged. Pure so it's testable without pipeline-host.ts's Electron
+ * utilityProcess wiring.
+ */
+export function resolveInitCustomerBrief(selected: string | null): string | undefined {
+  return selected ?? undefined
+}
+
+/**
+ * Sanitizes an operator-selected customer-brief name arriving over the
+ * renderer -> main `consent:affirm` IPC channel (Plans.md Task 6.7).
+ * `basename()` guards against path traversal via a crafted payload — the
+ * same defense `loadCustomerBrief` (src/pipeline/knowledge.ts) applies at
+ * the file-read boundary; this applies it earlier, at the IPC boundary.
+ * Null/undefined/blank all mean "none selected" (the safe default).
+ */
+export function sanitizeCustomerBriefSelection(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return null
+  return basename(trimmed)
+}
+
+/** What gets logged on affirmation. Timestamp + session id + the processor
+ *  set covered — deliberately never the customer-brief name itself (spec.md
+ *  §4 item 4 log hygiene: personal data stays out of this record too). */
 export interface ConsentRecord {
   readonly affirmedAt: string // ISO 8601
   readonly session: string // one id per gate instance, not tied to call content
+  readonly processors: ProcessorSet // spec.md §4 item 8: what this affirmation covered
 }
 
 export type ConsentWriter = (record: ConsentRecord) => void
@@ -75,19 +122,28 @@ export class ConsentGate {
   }
 
   /**
-   * Operator affirms consent for this call. Logs {affirmedAt, session} via
-   * the injected writer *before* flipping to 'affirmed' and running any
-   * `onAffirmed` callbacks — a write failure (e.g. disk full, unwritable
-   * `~/.copilot`) must never silently start capture. If `writer` throws, the
-   * state stays 'pending', no record is retained, and the error propagates
-   * to the caller (reviewer note, Plans.md Task 4.1): a failed log means
-   * consent isn't affirmed yet, not "affirmed but unlogged".
+   * Operator affirms consent for this call. Logs {affirmedAt, session,
+   * processors} via the injected writer *before* flipping to 'affirmed' and
+   * running any `onAffirmed` callbacks — a write failure (e.g. disk full,
+   * unwritable `~/.copilot`) must never silently start capture. If `writer`
+   * throws, the state stays 'pending', no record is retained, and the error
+   * propagates to the caller (reviewer note, Plans.md Task 4.1): a failed
+   * log means consent isn't affirmed yet, not "affirmed but unlogged".
+   *
+   * `processors` (Plans.md Task 6.7 / spec.md §4 item 8) is the processor
+   * set this affirmation covers — defaults to `'soniox'` (no second
+   * processor) so existing no-arg callers keep their prior behavior.
+   * `affirm()` is idempotent regardless of the argument on a second call: a
+   * double-click, or a late brief-selection change after the operator
+   * already affirmed, can't retroactively widen what was affirmed ("no
+   * mid-call switching").
    */
-  affirm(): ConsentRecord {
+  affirm(processors: ProcessorSet = 'soniox'): ConsentRecord {
     if (this.record !== null) return this.record
     const record: ConsentRecord = {
       affirmedAt: this.now().toISOString(),
-      session: this.session()
+      session: this.session(),
+      processors
     }
     this.writer(record) // throws -> state stays 'pending', nothing below runs
     this.record = record

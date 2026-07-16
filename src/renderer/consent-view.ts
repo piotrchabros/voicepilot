@@ -34,3 +34,19 @@ export interface RecIndicatorView {
 export function recIndicatorViewFor(state: ConsentViewState): RecIndicatorView {
   return { visible: state === 'affirmed' }
 }
+
+/** One `<option>` for the customer-brief dropdown. */
+export interface CustomerBriefOption {
+  readonly value: string // '' = none (the default)
+  readonly label: string
+}
+
+/**
+ * Customer-brief dropdown options (spec.md §7, Plans.md Task 6.7): "none" is
+ * always first and is the safe default (empty/missing `customers/` dir still
+ * renders a usable, "none"-only dropdown — never throws). Pure so it's
+ * testable without jsdom, mirroring `consentPromptViewFor` above.
+ */
+export function customerBriefOptionsFor(names: readonly string[]): readonly CustomerBriefOption[] {
+  return [{ value: '', label: 'none' }, ...names.map((name) => ({ value: name, label: name }))]
+}

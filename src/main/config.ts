@@ -36,6 +36,18 @@ export function playbookDir(): string {
 }
 
 /**
+ * `customers/<name>.md` briefs (spec.md §7, Plans.md Task 6.1/6.7) — same
+ * app-path-then-cwd resolution as `playbookDir()` above. Never copied into
+ * a derived store; `listCustomerBriefs`/`loadCustomerBrief`
+ * (src/pipeline/knowledge.ts) read straight from this directory.
+ */
+export function customersDir(): string {
+  const atRoot = join(app.getAppPath(), 'customers')
+  if (existsSync(atRoot)) return atRoot
+  return join(process.cwd(), 'customers')
+}
+
+/**
  * Soniox API key: SONIOX_API_KEY in `.env` (validated fail-fast by env.ts —
  * Plans.md 1.2 / spec.md §4.6), or a git-ignored `.soniox-key` file at the
  * project root as a deprecated fallback. Null when absent — the pipeline

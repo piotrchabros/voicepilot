@@ -174,6 +174,22 @@ export class KnowledgeBase {
 }
 
 /**
+ * Enumerates available `customers/<name>.md` brief basenames (without the
+ * `.md` extension) for the pre-Start consent-screen dropdown (spec.md §7,
+ * Plans.md Task 6.7). Missing/empty `customersDir` yields an empty list —
+ * never throws — so the dropdown safely falls back to "none" only.
+ */
+export function listCustomerBriefs(customersDir: string): string[] {
+  if (!existsSync(customersDir)) return []
+  return readdirSync(customersDir)
+    .filter(
+      (entry) => entry.toLowerCase().endsWith('.md') && statSync(join(customersDir, entry)).isFile()
+    )
+    .map((entry) => basename(entry, '.md'))
+    .sort()
+}
+
+/**
  * Load a `customers/<name>.md` brief whole, by explicit operator-selected
  * name (spec.md §7). This is deliberately outside `KnowledgeBase`: briefs
  * are always-injected, never retrieved, never scored, and never copied into

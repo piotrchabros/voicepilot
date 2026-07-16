@@ -70,6 +70,13 @@ export interface InitMsg {
   readonly playbookYaml: string
   readonly maxTurns: number
   readonly bench: boolean
+  /** Operator-selected customer-brief basename (spec.md §7, Plans.md Task
+   *  6.7): chosen once, pre-Start, on the consent screen — no mid-call
+   *  switching. Absent (not empty-string) when "none" was selected, the
+   *  default. Content loading (via `loadCustomerBrief`) and injection into
+   *  the analysis prompt is the (future) 6.4 AnalysisEngine's job; this
+   *  field only carries the selected name through init. */
+  readonly customerBrief?: string
 }
 
 /** main -> pipeline: lifecycle. */
@@ -139,6 +146,11 @@ export interface ConsentRequiredMsg {
    *  already affirmed) would wrongly re-show the prompt and drop the
    *  persistent REC indicator (reviewer note, Plans.md Task 4.1). */
   readonly state: ConsentState
+  /** Available `customers/<name>.md` brief basenames for the pre-Start
+   *  consent-screen dropdown (spec.md §7, Plans.md Task 6.7). Empty when the
+   *  `customers/` dir is missing/empty — the dropdown then shows only
+   *  "none", the safe default. */
+  readonly customerBriefs: readonly string[]
 }
 
 // ---- renderer API (exposed via preload contextBridge) ------------------------
@@ -152,8 +164,11 @@ export interface CopilotBridge {
    *  whether the operator still needs to affirm before capture can start
    *  (spec.md §4 item 2 / Plans.md Task 4.1). */
   onConsentRequired(cb: (msg: ConsentRequiredMsg) => void): () => void
-  /** Renderer -> main: the operator affirms consent for this call. */
-  affirmConsent(): void
+  /** Renderer -> main: the operator affirms consent for this call, carrying
+   *  the pre-Start customer-brief dropdown selection (`null` = "none", the
+   *  default). Selected once, at affirm time — no mid-call switching
+   *  (spec.md §7, Plans.md Task 6.7). */
+  affirmConsent(customerBrief: string | null): void
   /** Renderer -> main: subscription is live, safe to send hints now. */
   ready(): void
 }

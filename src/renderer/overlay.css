@@ -153,6 +153,30 @@ body {
   color: rgb(255, 196, 87);
 }
 
+/* Customer-brief dropdown (spec.md §7, Plans.md Task 6.7): sits between the
+   announcement and the affirm button, pointer-events: auto to match the
+   rest of #consent-prompt (real clicks land here while the prompt is up). */
+#customer-brief-label {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#customer-brief-select {
+  pointer-events: auto;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgb(255, 255, 255);
+}
+
 #consent-affirm-btn {
   pointer-events: auto;
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;

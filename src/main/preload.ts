@@ -21,8 +21,8 @@ const bridge: CopilotBridge = {
     ipcRenderer.on('consent-required', listener)
     return () => ipcRenderer.removeListener('consent-required', listener)
   },
-  affirmConsent(): void {
-    ipcRenderer.send('consent:affirm')
+  affirmConsent(customerBrief: string | null): void {
+    ipcRenderer.send('consent:affirm', customerBrief)
   },
   ready(): void {
     ipcRenderer.send('overlay:ready')

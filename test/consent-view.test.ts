@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { consentPromptViewFor, recIndicatorViewFor } from '../src/renderer/consent-view'
+import {
+  consentPromptViewFor,
+  customerBriefOptionsFor,
+  recIndicatorViewFor
+} from '../src/renderer/consent-view'
 
 // Pure display-logic extraction (mirrors health-banner.ts's bannerStateFor
 // pattern, spec.md Task 2.4): what the consent prompt / REC indicator should
@@ -41,5 +45,23 @@ describe('recIndicatorViewFor', () => {
 
   it('is visible (persistent) once consent is affirmed', () => {
     expect(recIndicatorViewFor('affirmed')).toEqual({ visible: true })
+  })
+})
+
+// Customer-brief dropdown (spec.md §7, Plans.md Task 6.7): "none" is always
+// the first option and the safe default — an empty/missing customers/ dir
+// must still render a usable ("none"-only) dropdown, never throw.
+
+describe('customerBriefOptionsFor', () => {
+  it('always leads with a "none" option (value: "") — the default', () => {
+    expect(customerBriefOptionsFor([])).toEqual([{ value: '', label: 'none' }])
+  })
+
+  it('lists available briefs after "none", in the given order', () => {
+    expect(customerBriefOptionsFor(['acme', 'globex'])).toEqual([
+      { value: '', label: 'none' },
+      { value: 'acme', label: 'acme' },
+      { value: 'globex', label: 'globex' }
+    ])
   })
 })

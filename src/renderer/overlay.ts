@@ -6,7 +6,12 @@ import type {
   SuggestionTransport
 } from '@shared/types'
 import { bannerStateFor } from './health-banner'
-import { consentPromptViewFor, type ConsentViewState, recIndicatorViewFor } from './consent-view'
+import {
+  consentPromptViewFor,
+  type ConsentViewState,
+  customerBriefOptionsFor,
+  recIndicatorViewFor
+} from './consent-view'
 import { hintDisplayFor } from './hint-view'
 import { modeLabelFor } from './mode-chip'
 
@@ -40,6 +45,7 @@ const healthEl = document.getElementById('health') as HTMLSpanElement
 const consentPrompt = document.getElementById('consent-prompt') as HTMLDivElement
 const consentAnnouncementEl = document.getElementById('consent-announcement') as HTMLSpanElement
 const consentAffirmBtn = document.getElementById('consent-affirm-btn') as HTMLButtonElement
+const customerBriefSelect = document.getElementById('customer-brief-select') as HTMLSelectElement
 const recIndicator = document.getElementById('rec-indicator') as HTMLDivElement
 const modeLabelEl = document.getElementById('mode-label') as HTMLSpanElement
 
@@ -94,7 +100,24 @@ function renderConsent(msg: ConsentRequiredMsg): void {
   consentAnnouncementEl.textContent = prompt.announcement
   consentPrompt.classList.toggle('visible', prompt.visible)
   consentPrompt.classList.toggle('placeholder', prompt.isPlaceholder)
+  renderCustomerBriefOptions(msg.customerBriefs)
   renderRecIndicator()
+}
+
+// Customer-brief dropdown (spec.md §7, Plans.md Task 6.7): options are
+// rebuilt from main's listing each time consent-required arrives (once per
+// overlay load); "none" (value: '') always leads and is the default.
+function renderCustomerBriefOptions(names: readonly string[]): void {
+  const options = customerBriefOptionsFor(names)
+  customerBriefSelect.replaceChildren(
+    ...options.map((opt) => {
+      const el = document.createElement('option')
+      el.value = opt.value
+      el.textContent = opt.label
+      return el
+    })
+  )
+  customerBriefSelect.value = ''
 }
 
 function renderRecIndicator(): void {
@@ -103,9 +126,13 @@ function renderRecIndicator(): void {
 }
 
 consentAffirmBtn.addEventListener('click', () => {
-  window.copilot.affirmConsent()
+  // Locked in at affirm time — no mid-call switching (spec.md §7). '' means
+  // "none" was selected, the default.
+  const selected = customerBriefSelect.value
+  window.copilot.affirmConsent(selected.length > 0 ? selected : null)
   consentState = 'affirmed'
   consentPrompt.classList.remove('visible')
+  customerBriefSelect.disabled = true
   renderRecIndicator()
 })
 

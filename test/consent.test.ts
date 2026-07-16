@@ -3,7 +3,10 @@ import {
   canStartCapture,
   CONSENT_ANNOUNCEMENT_PLACEHOLDER,
   ConsentGate,
+  processorSetFor,
   resolveAnnouncement,
+  resolveInitCustomerBrief,
+  sanitizeCustomerBriefSelection,
   wireCaptureStart
 } from '../src/main/consent'
 
@@ -60,13 +63,27 @@ describe('ConsentGate', () => {
 
     expect(record).toEqual({
       affirmedAt: '2026-07-15T12:00:00.000Z',
-      session: 'session-fixed-uuid'
+      session: 'session-fixed-uuid',
+      processors: 'soniox'
     })
     expect(writer).toHaveBeenCalledTimes(1)
     expect(writer).toHaveBeenCalledWith(record)
 
-    // shape guard: only timestamp + session id, nothing resembling call content
-    expect(Object.keys(record).sort()).toEqual(['affirmedAt', 'session'])
+    // shape guard: timestamp + session id + processor set — nothing resembling
+    // call content, and never the customer-brief name itself (Plans.md Task
+    // 6.7 / spec.md §4 item 8: the record lists the processor set covered,
+    // not personal data).
+    expect(Object.keys(record).sort()).toEqual(['affirmedAt', 'processors', 'session'])
+  })
+
+  it('affirm(processors) records the processor set the affirmation covers (Task 6.7)', () => {
+    const writer = vi.fn()
+    const now = () => new Date('2026-07-15T12:00:00.000Z')
+    const gate = new ConsentGate({ writer, now })
+    const record = gate.affirm('soniox+llm')
+
+    expect(record.processors).toBe('soniox+llm')
+    expect(writer).toHaveBeenCalledWith(expect.objectContaining({ processors: 'soniox+llm' }))
   })
 
   it('affirm() is idempotent — a second call does not re-log or change the record', () => {
@@ -104,7 +121,11 @@ describe('ConsentGate', () => {
     shouldFail = false
     const record = gate.affirm()
     expect(gate.state).toBe('affirmed')
-    expect(record).toEqual({ affirmedAt: '2026-07-15T12:00:00.000Z', session: expect.any(String) })
+    expect(record).toEqual({
+      affirmedAt: '2026-07-15T12:00:00.000Z',
+      session: expect.any(String),
+      processors: 'soniox'
+    })
     expect(writer).toHaveBeenCalledTimes(2)
   })
 })
@@ -166,5 +187,47 @@ describe('resolveAnnouncement', () => {
   it('never invents wording — uses the configured value verbatim when set', () => {
     const legal = 'Ta rozmowa jest nagrywana w celach szkoleniowych.'
     expect(resolveAnnouncement(legal)).toEqual({ text: legal, isPlaceholder: false })
+  })
+})
+
+// Customer-brief selection (spec.md §7 / §4 item 8, Plans.md Task 6.7):
+// pre-Start consent dropdown, default none, extends the per-call affirmation
+// record with the processor set it covered.
+
+describe('processorSetFor', () => {
+  it('is "soniox" alone when no brief is selected (none-path safety)', () => {
+    expect(processorSetFor(false)).toBe('soniox')
+  })
+
+  it('is "soniox+llm" when a brief is selected', () => {
+    expect(processorSetFor(true)).toBe('soniox+llm')
+  })
+})
+
+describe('resolveInitCustomerBrief', () => {
+  it('maps no selection (null) to undefined — InitMsg.customerBrief stays unset', () => {
+    expect(resolveInitCustomerBrief(null)).toBeUndefined()
+  })
+
+  it('passes a selected name through unchanged', () => {
+    expect(resolveInitCustomerBrief('acme')).toBe('acme')
+  })
+})
+
+describe('sanitizeCustomerBriefSelection', () => {
+  it('maps null/undefined/blank to null — "none" selected', () => {
+    expect(sanitizeCustomerBriefSelection(null)).toBeNull()
+    expect(sanitizeCustomerBriefSelection(undefined)).toBeNull()
+    expect(sanitizeCustomerBriefSelection('   ')).toBeNull()
+    expect(sanitizeCustomerBriefSelection('')).toBeNull()
+  })
+
+  it('passes a plain name through', () => {
+    expect(sanitizeCustomerBriefSelection('acme')).toBe('acme')
+  })
+
+  it('strips any path traversal via basename() — same defense as loadCustomerBrief', () => {
+    expect(sanitizeCustomerBriefSelection('../../etc/passwd')).toBe('passwd')
+    expect(sanitizeCustomerBriefSelection('../../secret')).toBe('secret')
   })
 })

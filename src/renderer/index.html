@@ -28,10 +28,19 @@
       operator affirms, then the persistent REC indicator above for the rest
       of the call. The window is click-through except while the prompt is
       visible (main toggles setIgnoreMouseEvents around this).
+
+      Customer-brief dropdown (spec.md §7, Plans.md Task 6.7): pre-Start,
+      operator-selected, default "none". Populated from main's directory
+      listing (overlay.ts's customerBriefOptionsFor); locked once affirmed —
+      no mid-call switching.
     -->
     <div id="health-pill"><span id="health"></span></div>
     <div id="consent-prompt">
       <span id="consent-announcement"></span>
+      <label id="customer-brief-label" for="customer-brief-select">
+        Customer brief
+        <select id="customer-brief-select"></select>
+      </label>
       <button id="consent-affirm-btn" type="button">I have obtained / will announce consent</button>
     </div>
     <div id="top-left-chrome">

@@ -1,12 +1,19 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
 import type { HealthMsg, Hint } from '@shared/types'
-import { ConsentGate, resolveAnnouncement } from './consent'
+import {
+  ConsentGate,
+  processorSetFor,
+  resolveAnnouncement,
+  sanitizeCustomerBriefSelection
+} from './consent'
+import { customersDir } from './config'
 import { loadEnv } from './env'
 import { startPipeline, type PipelineHandle } from './pipeline-host'
 import { runListDevices } from './list-devices'
 import { runBench } from './bench'
 import { runTtft } from './ttft'
+import { listCustomerBriefs } from '../pipeline/knowledge'
 
 // Fail-fast at boot (Plans.md 1.2 / spec.md §4.6): a malformed .env should
 // stop the app before any window/pipeline exists, not surface as a
@@ -27,6 +34,14 @@ if (announcement.isPlaceholder) {
       'This must not be used on a real-prospect call (docs/compliance.md item 4).'
   )
 }
+
+// Customer-brief selection (spec.md §7, Plans.md Task 6.7): operator picks
+// from a pre-Start consent-screen dropdown, default "none". The available
+// names are enumerated once at boot (mirrors playbook/'s directory-listing
+// pattern); the selection itself is captured on `consent:affirm` below and
+// never logged (log hygiene — customer names are personal data).
+const availableCustomerBriefs = listCustomerBriefs(customersDir())
+let selectedCustomerBrief: string | null = null
 
 // Overlay geometry — mirrors the Java Overlay: 900×150, bottom-centre, above
 // the dock. Height grew from 90 (Task 4.2 reviewer finding): the two-line
@@ -144,7 +159,9 @@ if (argv.includes('--list-devices')) {
         isPlaceholder: announcement.isPlaceholder,
         // Reload mid-call must not re-show the prompt or drop the REC
         // indicator if the operator already affirmed (reviewer note).
-        state: consentGate.state
+        state: consentGate.state,
+        // Task 6.7: available customer-brief dropdown options, "none"-safe.
+        customerBriefs: availableCustomerBriefs
       })
       if (consentGate.state !== 'affirmed') overlay?.setIgnoreMouseEvents(false)
 
@@ -173,9 +190,13 @@ if (argv.includes('--list-devices')) {
     // Operator affirms consent for this call (spec.md §4 item 2 / Plans.md
     // Task 4.1): logs the affirmation, unblocks `startPipeline`'s capture
     // start, and restores click-through now that the affirm button no longer
-    // needs real clicks.
-    ipcMain.on('consent:affirm', () => {
-      consentGate.affirm()
+    // needs real clicks. Task 6.7: also locks in the customer-brief
+    // selection (basename sanitized against the IPC payload) and records
+    // which processor set this affirmation covers — never the brief name
+    // itself (log hygiene: customer names are personal data).
+    ipcMain.on('consent:affirm', (_e, rawCustomerBrief: string | null) => {
+      selectedCustomerBrief = sanitizeCustomerBriefSelection(rawCustomerBrief)
+      consentGate.affirm(processorSetFor(selectedCustomerBrief !== null))
       overlay?.setIgnoreMouseEvents(true, { forward: true })
     })
 
@@ -183,7 +204,8 @@ if (argv.includes('--list-devices')) {
       onHint: paint,
       onLog: (l) => console.log(`[pipeline:${l.level}] ${l.msg}`),
       onHealth: paintHealth,
-      consentGate
+      consentGate,
+      getCustomerBrief: () => selectedCustomerBrief
     })
 
     app.on('activate', () => {
