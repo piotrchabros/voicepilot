@@ -2,6 +2,7 @@ import type { Speaker } from '@shared/types'
 import { z } from 'zod'
 import type { AnalysisLlm, Generation } from './analysis-llm'
 import {
+  ANALYSIS_MAX_PROMPT_CHARS,
   ANALYSIS_SYSTEM_PROMPT,
   buildAnalysisUserPrompt,
   containsSentimentVocabulary
@@ -26,6 +27,17 @@ import type { TranscriptState } from './transcript-state'
  *  HintEngine's DEBOUNCE_MS=200 — analysis is best-effort background work,
  *  not the latency-critical hint card (spec.md §7 "Latency/cost"). */
 export const ANALYSIS_DEBOUNCE_MS = 1500
+
+/**
+ * Hard per-call OUTPUT token cap (spec.md §7 "A hard per-call token cap
+ * applies") — forwarded to `AnalysisLlm.generate()`'s
+ * `AnalysisStreamOptions.maxOutputTokens` on every call. The matching INPUT
+ * side of the cap is `ANALYSIS_MAX_PROMPT_CHARS` (re-exported below from
+ * analysis-prompts.ts, enforced inside `buildAnalysisUserPrompt`).
+ */
+export const ANALYSIS_MAX_OUTPUT_TOKENS = 300
+
+export { ANALYSIS_MAX_PROMPT_CHARS }
 
 /** Closed set of conversation stages (spec.md §7 "Closed output schema"). */
 const ANALYSIS_STAGES = ['discovery', 'demo', 'objection', 'closing', 'other'] as const
@@ -150,9 +162,18 @@ export class AnalysisEngine {
     })
 
     let acc = ''
-    const gen = this.llm.generate(ANALYSIS_SYSTEM_PROMPT, userPrompt, (tok) => {
-      acc += tok
-    })
+    // Hard per-call token cap (spec.md §7): userPrompt is already bounded on
+    // the INPUT side by buildAnalysisUserPrompt (ANALYSIS_MAX_PROMPT_CHARS,
+    // truncating oldest rolling-window content first); maxOutputTokens below
+    // is the OUTPUT-side half, forwarded to every AnalysisLlm implementation.
+    const gen = this.llm.generate(
+      ANALYSIS_SYSTEM_PROMPT,
+      userPrompt,
+      (tok) => {
+        acc += tok
+      },
+      { maxOutputTokens: ANALYSIS_MAX_OUTPUT_TOKENS }
+    )
     this.inFlight = gen
 
     void gen.done.then(() => {

@@ -20,6 +20,10 @@ export interface Generation {
 export interface AnalysisStreamOptions {
   /** Fired once, when the first content token/chunk arrives. */
   onFirstToken?: () => void
+  /** Hard per-call output token cap (spec.md §7 "A hard per-call token cap
+   *  applies"). Every `AnalysisLlm` implementation must forward this to the
+   *  underlying request when present — see `CloudLlmClient.run()`. */
+  maxOutputTokens?: number
 }
 
 /**

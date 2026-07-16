@@ -242,7 +242,15 @@ export class CloudLlmClient implements AnalysisLlm {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.config.apiKey}`
       },
-      body: JSON.stringify({ system_prompt: systemPrompt, user_prompt: userPrompt }),
+      // Hard per-call output token cap (spec.md §7): forwarded whenever the
+      // caller (AnalysisEngine) supplies one. Omitted entirely when absent
+      // rather than sent as `undefined`, so a vendor that rejects unknown/
+      // null fields still gets a clean request body.
+      body: JSON.stringify({
+        system_prompt: systemPrompt,
+        user_prompt: userPrompt,
+        ...(opts.maxOutputTokens !== undefined && { max_tokens: opts.maxOutputTokens })
+      }),
       signal
     })
     if (isCancelled()) return

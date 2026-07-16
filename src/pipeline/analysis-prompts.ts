@@ -32,9 +32,17 @@ If nothing useful applies, output {"stage": "other", "suggested_questions": []}.
  * schema"). Growing this list is a recorded product decision, same bar as
  * EMOTION_INFERENCE_PATTERNS in knowledge.ts — do not extend it ad hoc from
  * a call site.
+ *
+ * Reviewer note (Task 6.4 review round): spec.md §1 non-goals prohibits FOUR
+ * categories — emotion / sentiment / stress / **personality** — and
+ * ANALYSIS_SYSTEM_PROMPT (+ its test) name all four. This list must cover
+ * every category named in that prohibition sentence, not just the obvious
+ * ones — an earlier version of this list omitted "personality" entirely,
+ * letting a response like "appeal to their analytical personality type"
+ * through the output guard.
  */
 export const SENTIMENT_OUTPUT_PATTERNS: readonly RegExp[] = [
-  // English
+  // English — emotion / sentiment / stress
   /sentiment/i,
   /\bemotion/i,
   /\bstress/i,
@@ -43,13 +51,24 @@ export const SENTIMENT_OUTPUT_PATTERNS: readonly RegExp[] = [
   /\bmood\b/i,
   /\bupset\b/i,
   /\banxious\b/i,
-  // Polish
+  // English — personality
+  /personality/i,
+  /\bintrovert/i,
+  /\bextrovert/i,
+  /\btemperament/i,
+  // Polish — emotion / sentiment / stress
   /nastroj/i,
   /emocj/i,
   /zdenerwowan/i,
   /sfrustrowan/i,
   /zestresowan/i,
-  /zaniepokojon/i
+  /zaniepokojon/i,
+  // Polish — personality (inflection-tolerant prefix, same style as
+  // knowledge.ts's EMOTION_INFERENCE_PATTERNS: "osobowość"/"osobowości"/
+  // "osobowościowy" all share the "osobowo[sś]" stem)
+  /osobowo[sś]/i,
+  /\bcharakter/i,
+  /temperament/i
 ]
 
 /** True when `text` matches any entry in {@link SENTIMENT_OUTPUT_PATTERNS}. */
@@ -65,15 +84,15 @@ export interface AnalysisPromptInput {
 }
 
 /**
- * Builds the user prompt for one analysis call. Only the rolling-window
- * transcript text + top-K KB snippets + the selected brief content leave the
- * device — never the whole KnowledgeBase (spec.md §7). "as of turn N" stamps
- * the rolling window's turn count so a caller can tell how stale the
- * transcript context was at generation time — a display value, not a
- * global monotonic counter (it plateaus at TranscriptState's retained-turn
- * cap; see TranscriptState.renderRollingWindow).
+ * Hard per-call prompt cap (spec.md §7 "A hard per-call token cap applies").
+ * A char budget, not a tokenizer-accurate token count — cheap, vendor-
+ * agnostic, and conservative (chars >= tokens for any real tokenizer), which
+ * is what a hard safety cap needs to be. Exported so AnalysisEngine and
+ * tests can reference the same number.
  */
-export function buildAnalysisUserPrompt(input: AnalysisPromptInput): string {
+export const ANALYSIS_MAX_PROMPT_CHARS = 6000
+
+function renderUserPrompt(input: AnalysisPromptInput): string {
   let sb = ''
   sb += `<as-of-turn>${input.asOfTurn}</as-of-turn>\n\n`
   sb += '<transcript>\n'
@@ -92,4 +111,34 @@ export function buildAnalysisUserPrompt(input: AnalysisPromptInput): string {
     sb += '\n</customer-brief>\n\n'
   }
   return sb
+}
+
+/**
+ * Builds the user prompt for one analysis call. Only the rolling-window
+ * transcript text + top-K KB snippets + the selected brief content leave the
+ * device — never the whole KnowledgeBase (spec.md §7). "as of turn N" stamps
+ * the rolling window's turn count so a caller can tell how stale the
+ * transcript context was at generation time — a display value, not a
+ * global monotonic counter (it plateaus at TranscriptState's retained-turn
+ * cap; see TranscriptState.renderRollingWindow).
+ *
+ * Enforces the hard per-call prompt cap (spec.md §7): when the assembled
+ * prompt exceeds `maxChars`, the OLDEST rolling-window transcript content is
+ * truncated first (dropped from the front — turns render oldest-first,
+ * newest-last, same ordering TranscriptState.renderRollingWindow uses) —
+ * the system prompt (ANALYSIS_SYSTEM_PROMPT, assembled by the caller, never
+ * touches this function) and the already top-K-bounded KB/brief sections
+ * are never trimmed.
+ */
+export function buildAnalysisUserPrompt(
+  input: AnalysisPromptInput,
+  maxChars: number = ANALYSIS_MAX_PROMPT_CHARS
+): string {
+  const full = renderUserPrompt(input)
+  if (full.length <= maxChars) return full
+
+  const overage = full.length - maxChars
+  const truncatedTranscript =
+    input.transcriptText.length > overage ? input.transcriptText.slice(overage) : ''
+  return renderUserPrompt({ ...input, transcriptText: truncatedTranscript })
 }

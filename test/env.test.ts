@@ -84,6 +84,21 @@ describe('validateEnv', () => {
     expect(validateEnv({ LLM_API_URL: '   ' })).toEqual({})
   })
 
+  // Plans.md Task 6.4 / spec.md §7 cloud-send feature flag — same
+  // fail-closed BOOLEAN_FLAG pattern as COPILOT_DEBUG et al above.
+  it('accepts LLM_ANALYSIS_ENABLED="0" and "1"', () => {
+    expect(validateEnv({ LLM_ANALYSIS_ENABLED: '0' })).toEqual({ LLM_ANALYSIS_ENABLED: '0' })
+    expect(validateEnv({ LLM_ANALYSIS_ENABLED: '1' })).toEqual({ LLM_ANALYSIS_ENABLED: '1' })
+  })
+
+  it('rejects LLM_ANALYSIS_ENABLED="true" — naming the variable, BOOLEAN_FLAG is 0/1 only', () => {
+    expect(() => validateEnv({ LLM_ANALYSIS_ENABLED: 'true' })).toThrow(/LLM_ANALYSIS_ENABLED/)
+  })
+
+  it('treats a blank LLM_ANALYSIS_ENABLED as unset, same as the other flags', () => {
+    expect(validateEnv({ LLM_ANALYSIS_ENABLED: '' })).toEqual({})
+  })
+
   it('reports every offending variable in one throw, not just the first', () => {
     expect.assertions(2)
     try {

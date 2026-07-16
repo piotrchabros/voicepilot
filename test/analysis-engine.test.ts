@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnalysisStreamOptions, Generation } from '../src/pipeline/analysis-llm'
 import {
   ANALYSIS_DEBOUNCE_MS,
+  ANALYSIS_MAX_OUTPUT_TOKENS,
+  ANALYSIS_MAX_PROMPT_CHARS,
   AnalysisEngine,
   resolveAnalysisEnabledFlag,
   type Analysis
@@ -24,6 +26,7 @@ interface Rec {
   systemPrompt: string
   userPrompt: string
   cancelled: boolean
+  maxOutputTokens: number | undefined
 }
 
 /** Stub AnalysisLlm — mirrors StubLlm in test/hint-engine.test.ts. Records
@@ -47,7 +50,12 @@ class StubAnalysisLlm {
     if (this.failIfCalled) {
       throw new Error('AnalysisLlm.generate() must never be called with the feature flag off')
     }
-    const rec: Rec = { systemPrompt, userPrompt, cancelled: false }
+    const rec: Rec = {
+      systemPrompt,
+      userPrompt,
+      cancelled: false,
+      maxOutputTokens: opts.maxOutputTokens
+    }
     this.calls.push(rec)
     const toks = this.nextTokens.shift() ?? []
     if (toks.length > 0) opts.onFirstToken?.()
@@ -160,6 +168,22 @@ describe('AnalysisEngine closed output schema (zod) — non-conforming responses
     })
   })
 
+  it('accepts exactly 3 suggested_questions — the boundary is inclusive', async () => {
+    const { engine, llm, state, results } = setup()
+    state.settle('THEM', 'turn')
+    llm.nextTokens = [
+      jsonResponse({
+        stage: 'discovery',
+        suggested_questions: ['a', 'b', 'c']
+      })
+    ]
+    engine.onTurnEnd('THEM', 'turn')
+    vi.advanceTimersByTime(ANALYSIS_DEBOUNCE_MS)
+    await flushMicrotasks()
+    expect(results).toHaveLength(1)
+    expect(results[0]?.suggestedQuestions).toEqual(['a', 'b', 'c'])
+  })
+
   it('drops a response with more than 3 suggested_questions', async () => {
     const { engine, llm, state, results } = setup()
     state.settle('THEM', 'turn')
@@ -268,6 +292,33 @@ describe('AnalysisEngine no-sentiment guard (spec.md §1 non-goals, extends Task
     await flushMicrotasks()
     expect(results).toHaveLength(0)
   })
+
+  // Reviewer note (Task 6.4 review round): spec.md §1 prohibits FOUR
+  // categories — emotion / sentiment / stress / personality. An earlier
+  // version of SENTIMENT_OUTPUT_PATTERNS covered only the first three,
+  // letting a personality-profiling suggestion straight through the output
+  // guard. These two cases pin all four categories on the output path.
+  it('containsSentimentVocabulary matches EN/PL personality vocabulary', () => {
+    expect(containsSentimentVocabulary('appeal to their analytical personality type')).toBe(true)
+    expect(containsSentimentVocabulary('they read as a classic introvert')).toBe(true)
+    expect(containsSentimentVocabulary('dopasuj ofertę do jego osobowości')).toBe(true)
+    expect(containsSentimentVocabulary('ask about their renewal timeline')).toBe(false)
+  })
+
+  it("OUTPUT path: a response whose suggested_questions profiles the prospect's personality is dropped", async () => {
+    const { engine, llm, state, results } = setup()
+    state.settle('THEM', 'turn')
+    llm.nextTokens = [
+      jsonResponse({
+        stage: 'discovery',
+        suggested_questions: ['Appeal to their analytical personality type with data-heavy proof']
+      })
+    ]
+    engine.onTurnEnd('THEM', 'turn')
+    vi.advanceTimersByTime(ANALYSIS_DEBOUNCE_MS)
+    await flushMicrotasks()
+    expect(results).toHaveLength(0)
+  })
 })
 
 describe('AnalysisEngine cloud-send feature flag (default OFF)', () => {
@@ -335,5 +386,64 @@ describe('AnalysisEngine input scope (only rolling window + top-K KB + brief lea
     engine.onTurnEnd('THEM', 'turn')
     vi.advanceTimersByTime(ANALYSIS_DEBOUNCE_MS)
     expect(llm.calls[0]?.userPrompt).toContain('Acme Corp — mid-market SaaS, expansion motion.')
+  })
+})
+
+describe('AnalysisEngine hard per-call token cap (spec.md §7 "A hard per-call token cap applies")', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  // A large `maxTurns` here means TranscriptState itself never evicts a
+  // turn (that cap is orthogonal — spec.md §3's "grow then reset"), so any
+  // truncation observed below is provably AnalysisEngine's OWN
+  // ANALYSIS_MAX_PROMPT_CHARS cap at work, not TranscriptState's retention
+  // window doing the job for it.
+  function setupUnbounded(): {
+    engine: AnalysisEngine
+    llm: StubAnalysisLlm
+    state: TranscriptState
+  } {
+    const llm = new StubAnalysisLlm()
+    const kb = new KnowledgeBase()
+    const state = new TranscriptState('sys', 'pb', 5000)
+    const engine = new AnalysisEngine(llm, kb, state, () => {}, { enabled: true })
+    return { engine, llm, state }
+  }
+
+  it('bounds an oversized assembled prompt before send — never exceeds ANALYSIS_MAX_PROMPT_CHARS', () => {
+    const { engine, llm, state } = setupUnbounded()
+    // Grossly oversized rolling window: far beyond ANALYSIS_MAX_PROMPT_CHARS
+    // on its own, so the cap must actually engage (not just happen to be a
+    // no-op because the fixture was already small).
+    for (let i = 0; i < 200; i++) {
+      state.settle('THEM', `prospect turn number ${i} with some more filler text to pad it out`)
+    }
+    engine.onTurnEnd('THEM', 'final prospect turn')
+    vi.advanceTimersByTime(ANALYSIS_DEBOUNCE_MS)
+    expect(llm.calls).toHaveLength(1)
+    expect(llm.calls[0]?.userPrompt.length).toBeLessThanOrEqual(ANALYSIS_MAX_PROMPT_CHARS)
+  })
+
+  it('truncates the OLDEST rolling-window content first, keeping the newest turn intact', () => {
+    const { engine, llm, state } = setupUnbounded()
+    state.settle('THEM', 'UNIQUE-OLDEST-MARKER-must-not-survive-truncation')
+    for (let i = 0; i < 200; i++) {
+      state.settle('THEM', `prospect turn number ${i} with some more filler text to pad it out`)
+    }
+    state.settle('THEM', 'UNIQUE-NEWEST-MARKER-must-survive-truncation')
+    engine.onTurnEnd('THEM', 'UNIQUE-NEWEST-MARKER-must-survive-truncation')
+    vi.advanceTimersByTime(ANALYSIS_DEBOUNCE_MS)
+    const prompt = llm.calls[0]?.userPrompt ?? ''
+    expect(prompt.length).toBeLessThanOrEqual(ANALYSIS_MAX_PROMPT_CHARS)
+    expect(prompt).toContain('UNIQUE-NEWEST-MARKER-must-survive-truncation')
+    expect(prompt).not.toContain('UNIQUE-OLDEST-MARKER-must-not-survive-truncation')
+  })
+
+  it('forwards ANALYSIS_MAX_OUTPUT_TOKENS as maxOutputTokens on every call', () => {
+    const { engine, llm, state } = setup()
+    state.settle('THEM', 'turn')
+    engine.onTurnEnd('THEM', 'turn')
+    vi.advanceTimersByTime(ANALYSIS_DEBOUNCE_MS)
+    expect(llm.calls[0]?.maxOutputTokens).toBe(ANALYSIS_MAX_OUTPUT_TOKENS)
   })
 })
