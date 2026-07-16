@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
-import type { HealthMsg, Hint } from '@shared/types'
+import type { Analysis, HealthMsg, Hint } from '@shared/types'
 import { ConsentGate, handleConsentAffirm, resolveAnnouncement } from './consent'
 import { customersDir } from './config'
 import { loadEnv } from './env'
@@ -124,6 +124,18 @@ function paintHealth(health: HealthMsg): void {
   overlay?.webContents.send('health', health)
 }
 
+// Task 6.5 (spec.md §7, Plans.md): forwards a best-effort analysis result to
+// the overlay window over the same webContents channel pattern as
+// paint()/paintHealth() above. The dedicated side-panel window is Task 6.6 —
+// this deliberately does NOT create a new BrowserWindow; it only wires the
+// existing overlay to receive the channel so 6.6 has somewhere to render
+// from. Log hygiene (spec.md §4.4/§7): analysis content is call content —
+// this function must never log it (formatAnalysisLog's debug-gated line
+// already covers the pipeline side; no new logging is added here).
+function paintAnalysis(analysis: Analysis): void {
+  overlay?.webContents.send('analysis', analysis)
+}
+
 // --- CLI subcommands (do not launch the overlay) ------------------------------
 
 const argv = process.argv.slice(app.isPackaged ? 1 : 2)
@@ -208,6 +220,7 @@ if (argv.includes('--list-devices')) {
       onHint: paint,
       onLog: (l) => console.log(`[pipeline:${l.level}] ${l.msg}`),
       onHealth: paintHealth,
+      onAnalysis: paintAnalysis,
       consentGate,
       getCustomerBrief: () => selectedCustomerBrief
     })

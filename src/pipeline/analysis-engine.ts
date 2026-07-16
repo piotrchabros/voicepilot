@@ -1,4 +1,4 @@
-import type { Speaker } from '@shared/types'
+import type { Analysis, AnalysisStage, Speaker } from '@shared/types'
 import { z } from 'zod'
 import type { AnalysisLlm, Generation } from './analysis-llm'
 import {
@@ -39,9 +39,20 @@ export const ANALYSIS_MAX_OUTPUT_TOKENS = 300
 
 export { ANALYSIS_MAX_PROMPT_CHARS }
 
-/** Closed set of conversation stages (spec.md §7 "Closed output schema"). */
-const ANALYSIS_STAGES = ['discovery', 'demo', 'objection', 'closing', 'other'] as const
-export type AnalysisStage = (typeof ANALYSIS_STAGES)[number]
+/** Closed set of conversation stages (spec.md §7 "Closed output schema").
+ *  `AnalysisStage`/`Analysis` are now defined in shared/types.ts (Task 6.5,
+ *  the wire-shape SSOT) — re-exported here so existing imports of this
+ *  module (e.g. `./index.ts`) don't need to change. `satisfies` keeps this
+ *  tuple (needed by zod's `z.enum`, which requires a non-empty literal
+ *  tuple, not a general array) checked against that same union at
+ *  compile-time — a typo or drift here is a type error. */
+const ANALYSIS_STAGES = [
+  'discovery',
+  'demo',
+  'objection',
+  'closing',
+  'other'
+] as const satisfies readonly AnalysisStage[]
 
 /** zod schema for the LLM's raw response. Non-conforming responses (wrong
  *  stage, >3 questions, missing required fields, extra free-form fields the
@@ -52,18 +63,7 @@ const AnalysisOutputSchema = z.object({
   next_steps: z.array(z.string()).optional()
 })
 
-/**
- * One analysis result — closed schema (spec.md §7): NO free-form
- * prospect-state field. `asOfTurn` stamps the rolling-window turn count at
- * generation time (a display value, not a global monotonic counter — see
- * TranscriptState.renderRollingWindow).
- */
-export interface Analysis {
-  readonly stage: AnalysisStage
-  readonly suggestedQuestions: readonly string[]
-  readonly nextSteps?: readonly string[]
-  readonly asOfTurn: number
-}
+export type { Analysis, AnalysisStage }
 
 const BOOLEAN_FLAG = z.enum(['0', '1'])
 

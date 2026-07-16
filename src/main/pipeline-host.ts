@@ -2,7 +2,7 @@ import { type UtilityProcess, utilityProcess } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AudioFrame } from '@shared/audio-source'
-import type { FromPipeline, HealthMsg, Hint, InitMsg, LogMsg } from '@shared/types'
+import type { Analysis, FromPipeline, HealthMsg, Hint, InitMsg, LogMsg } from '@shared/types'
 import {
   checkModels,
   customersDir,
@@ -45,6 +45,11 @@ export interface PipelineDeps {
    *  `child.once('spawn')`/`llama.ensure()`, by which point the operator may
    *  have already affirmed consent with a selection. */
   getCustomerBrief: () => string | null
+  /** Optional: a best-effort analysis result to forward to the (future, Task
+   *  6.6) side panel (spec.md §7, Plans.md Task 6.5). Optional because the
+   *  analysis engine itself is optional (feature-flagged, cloud-LLM
+   *  dependent) — main may run with no handler wired. */
+  onAnalysis?: (analysis: Analysis) => void
 }
 
 export interface PipelineHandle {
@@ -85,6 +90,50 @@ export function sendInitWhenReady(deps: SendInitDeps): Promise<void> {
   })
 }
 
+/** Routing deps for `routeFromPipelineMessage` below — a subset of
+ *  `PipelineDeps` (excludes `consentGate`/`getCustomerBrief`, which
+ *  `startPipeline` uses elsewhere, not in the message switch). */
+export interface RouteFromPipelineDeps {
+  onHint: (hint: Hint) => void
+  onLog: (log: LogMsg) => void
+  onHealth: (health: HealthMsg) => void
+  onAnalysis?: (analysis: Analysis) => void
+}
+
+/**
+ * Pure routing table for `child.on('message')` (Task 6.5) — extracted so the
+ * switch itself is unit-testable without a live `utilityProcess`, same seam
+ * pattern as `sendInitWhenReady` above. `logFn` mirrors `startPipeline`'s
+ * local `log` helper (level + message, not a `LogMsg`).
+ */
+export function routeFromPipelineMessage(
+  msg: FromPipeline,
+  deps: RouteFromPipelineDeps,
+  logFn: (level: LogMsg['level'], msg: string) => void
+): void {
+  switch (msg.type) {
+    case 'hint':
+      deps.onHint(msg.hint)
+      break
+    case 'log':
+      deps.onLog(msg)
+      break
+    case 'ready':
+      logFn('info', 'pipeline reports ready')
+      break
+    case 'metric':
+      // consumed by the bench harness only
+      break
+    case 'health':
+      // e.g. Soniox ws disconnect, reported by the pipeline utilityProcess.
+      deps.onHealth(msg)
+      break
+    case 'analysis':
+      deps.onAnalysis?.(msg.analysis)
+      break
+  }
+}
+
 export function startPipeline(deps: PipelineDeps): PipelineHandle {
   const log = (level: LogMsg['level'], msg: string): void => deps.onLog({ type: 'log', level, msg })
 
@@ -111,26 +160,7 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
     stdio: 'inherit'
   })
 
-  child.on('message', (msg: FromPipeline) => {
-    switch (msg.type) {
-      case 'hint':
-        deps.onHint(msg.hint)
-        break
-      case 'log':
-        deps.onLog(msg)
-        break
-      case 'ready':
-        log('info', 'pipeline reports ready')
-        break
-      case 'metric':
-        // consumed by the bench harness only
-        break
-      case 'health':
-        // e.g. Soniox ws disconnect, reported by the pipeline utilityProcess.
-        deps.onHealth(msg)
-        break
-    }
-  })
+  child.on('message', (msg: FromPipeline) => routeFromPipelineMessage(msg, deps, log))
 
   // 2. Supervise llama-server (spawn if needed, poll /health), then init pipeline.
   const llama = new LlamaSupervisor({

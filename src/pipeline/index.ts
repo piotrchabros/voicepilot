@@ -88,6 +88,23 @@ export function formatAnalysisLog(analysis: Analysis, debug: boolean): string | 
   )
 }
 
+// Task 6.5 (Plans.md): AnalysisEngine's sink must forward every result to
+// main via `send({ type: 'analysis', analysis })`, on top of the existing
+// debug-gated log line (Task 6.4) — never instead of it. Extracted as a pure
+// function (same seam pattern as the `format*Log` helpers above) so the
+// wiring is unit-testable without a live `parentPort`/full `init()`.
+export function buildAnalysisSink(
+  debug: boolean,
+  sendFn: (msg: FromPipeline) => void,
+  logFn: (level: 'info' | 'warn' | 'error', msg: string) => void
+): (analysis: Analysis) => void {
+  return (analysis: Analysis) => {
+    const analysisLog = formatAnalysisLog(analysis, debug)
+    if (analysisLog !== null) logFn('info', analysisLog)
+    sendFn({ type: 'analysis', analysis })
+  }
+}
+
 interface LegRuntime {
   who: Speaker
   vad: SileroVad
@@ -166,10 +183,7 @@ async function init(cfg: InitMsg): Promise<void> {
           new CloudLlmClient(cloudConfig),
           kb,
           state,
-          (analysis) => {
-            const analysisLog = formatAnalysisLog(analysis, DEBUG)
-            if (analysisLog !== null) log('info', analysisLog)
-          },
+          buildAnalysisSink(DEBUG, send, log),
           { customerBriefContent, enabled: analysisFlag }
         )
       } else if (analysisFlag) {

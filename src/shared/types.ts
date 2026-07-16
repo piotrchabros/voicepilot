@@ -136,7 +136,38 @@ export interface HealthMsg {
   readonly detail: string
 }
 
-export type FromPipeline = HintMsg | MetricMsg | LogMsg | ReadyMsg | HealthMsg
+/** Closed set of conversation stages for the Phase-6 analysis side panel
+ *  (spec.md §7 "Closed output schema", Plans.md Task 6.4). SSOT here — the
+ *  wire shape (AnalysisMsg below) and the pipeline's zod validation
+ *  (analysis-engine.ts's `ANALYSIS_STAGES`) both derive from this same set,
+ *  so a value outside it is a type error at either end. */
+export type AnalysisStage = 'discovery' | 'demo' | 'objection' | 'closing' | 'other'
+
+/** One best-effort analysis result (spec.md §7; Plans.md Task 6.4/6.5) —
+ *  closed schema, NO free-form prospect-state field. Must stay
+ *  plain-serializable JSON (no class instances, no functions, no `Date`
+ *  objects) so it survives today's `utilityProcess.postMessage()`
+ *  structured-clone AND a JSON-over-WebSocket bridge in Phase 5.1 unchanged
+ *  (spec.md §7, Plans.md Task 6.5). `asOfTurn` stamps the rolling-window turn
+ *  count at generation time (a display value, not a global monotonic
+ *  counter — see TranscriptState.renderRollingWindow). */
+export interface Analysis {
+  readonly stage: AnalysisStage
+  readonly suggestedQuestions: readonly string[]
+  readonly nextSteps?: readonly string[]
+  readonly asOfTurn: number
+}
+
+/** pipeline -> main: a best-effort analysis result for the (future, Task 6.6)
+ *  side panel. Plain-serializable JSON only — see `Analysis` above.
+ *  Optional consumer: main may have no `onAnalysis` handler wired yet
+ *  (Plans.md Task 6.5) without this ever being an error case. */
+export interface AnalysisMsg {
+  readonly type: 'analysis'
+  readonly analysis: Analysis
+}
+
+export type FromPipeline = HintMsg | MetricMsg | LogMsg | ReadyMsg | HealthMsg | AnalysisMsg
 
 /** Transport-B consent state (spec.md §4 item 2 / Plans.md Task 4.1): whether
  *  the operator has affirmed consent for this call yet. Single source of
@@ -170,6 +201,10 @@ export interface CopilotBridge {
   /** Renderer -> main: a health event (sidecar exit / device loss / Soniox
    *  disconnect) to reflect as a banner. */
   onHealth(cb: (health: HealthMsg) => void): () => void
+  /** main -> renderer: a best-effort analysis result for the (future, Task
+   *  6.6) side panel. Mirrors `onHint` exactly (spec.md §7, Plans.md Task
+   *  6.5) — nothing else crosses the bridge for this channel. */
+  onAnalysis(cb: (analysis: Analysis) => void): () => void
   /** main -> renderer: the consent announcement script to render, and
    *  whether the operator still needs to affirm before capture can start
    *  (spec.md §4 item 2 / Plans.md Task 4.1). */
