@@ -64,10 +64,9 @@ employee).
 cloud-send feature flag stays OFF until then.** This mirrors the real-prospect
 call gate above — the cloud analysis LLM is a second processor sitting on top
 of the transcript/customer-brief data, and it needs its own DPA/retention/
-consent chain before any real-prospect data may be sent to it. This extends
-the `spec.md` §4 "Compliance & security (EU) — blocking requirements" list
-(items 1–7) with the Phase-6 cloud analysis LLM requirement; `spec.md` should
-be updated with a corresponding item 8 when this feature is scoped there.
+consent chain before any real-prospect data may be sent to it. This section
+implements the ledger rows required by `spec.md` §4 item 8 (cloud analysis
+LLM as second data processor).
 
 | # | Item | Status | Evidence / how to verify |
 |---|------|--------|---------------------------|
