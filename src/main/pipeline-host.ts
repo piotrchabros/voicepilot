@@ -51,6 +51,40 @@ export interface PipelineHandle {
   shutdown: () => void
 }
 
+export interface SendInitDeps {
+  /** Resolves once llama-server is ready (or not) — mirrors `llama.ensure()`. */
+  llamaReady: Promise<boolean>
+  /** Builds every InitMsg field except `customerBrief`. Called at send
+   *  time, same as `getCustomerBrief` below. */
+  buildBaseInit: () => Omit<InitMsg, 'customerBrief'>
+  /** Read at send time, NOT at pipeline-spawn/construction time (reviewer
+   *  finding on commit cc11c18, Task 6.7 MAJOR A): the utilityProcess
+   *  `'spawn'` event fires machine-fast, long before a human operator
+   *  affirms consent with a brief selection — reading this eagerly at
+   *  spawn time would almost always miss a real selection. */
+  getCustomerBrief: () => string | null
+  onLlamaNotReady: () => void
+  send: (init: InitMsg) => void
+}
+
+/**
+ * Sends `InitMsg` once `llamaReady` resolves, reading `getCustomerBrief()`
+ * at THAT point rather than at pipeline-spawn/construction time (reviewer
+ * finding MAJOR A, Task 6.7). Extracted as pure orchestration — no Electron
+ * API calls — so the temporal ordering itself is unit-testable without
+ * `utilityProcess`/`LlamaSupervisor` (see test/pipeline-host-init.test.ts).
+ */
+export function sendInitWhenReady(deps: SendInitDeps): Promise<void> {
+  return deps.llamaReady.then((ok) => {
+    if (!ok) deps.onLlamaNotReady()
+    const base = deps.buildBaseInit()
+    const customerBrief = resolveInitCustomerBrief(deps.getCustomerBrief())
+    // exactOptionalPropertyTypes: spread it in only when selected — see the
+    // comment at the previous call site (Plans.md Task 6.7).
+    deps.send({ ...base, ...(customerBrief !== undefined && { customerBrief }) })
+  })
+}
+
 export function startPipeline(deps: PipelineDeps): PipelineHandle {
   const log = (level: LogMsg['level'], msg: string): void => deps.onLog({ type: 'log', level, msg })
 
@@ -106,45 +140,50 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
   })
 
   child.once('spawn', () => {
-    // `playbookYaml` carries a filesystem path (directory of *.yaml/*.yml
-    // files, spec.md §3), not raw YAML text — `Playbook.fromYaml()` on the
-    // pipeline side resolves it against disk the same way this main process
-    // can. Passing a path (not file contents) keeps a multi-file playbook/
-    // directory a single round trip instead of pre-merging N files by hand.
-    let playbookYaml = playbookDir()
-    if (!existsSync(playbookYaml)) {
-      log('warn', `playbook/ not found at ${playbookYaml} — retrieval layer disabled`)
-      playbookYaml = ''
-    }
-    // exactOptionalPropertyTypes: `undefined` is not assignable to an
-    // optional `string` field — spread it in only when a brief was
-    // selected, so "none" (the default) omits the key entirely rather than
-    // setting it to undefined (Plans.md Task 6.7).
-    const customerBrief = resolveInitCustomerBrief(deps.getCustomerBrief())
-    const init: InitMsg = {
-      type: 'init',
-      sileroPath: paths.silero,
-      zipformerDir: paths.zipformer,
-      sonioxApiKey: sonioxApiKey(),
-      sonioxLanguageHints: SONIOX_LANGUAGE_HINTS,
-      sonioxWsUrl: sonioxWsUrl(),
-      llamaBase: paths.llamaBase,
-      systemPrompt: SYSTEM_PROMPT,
-      staticContext: STATIC_CONTEXT,
-      playbookYaml,
-      maxTurns: MAX_TURNS,
-      bench: false,
-      ...(customerBrief !== undefined && { customerBrief }),
-      // Phase-6 AnalysisEngine (spec.md §7, Plans.md Task 6.4): only
-      // filesystem paths cross this boundary — KB/brief content is loaded
-      // fresh on the pipeline side (see src/pipeline/index.ts's init()).
-      knowledgeDir: knowledgeDir(),
-      customersDir: customersDir()
-    }
-    // Bring llama up before the pipeline warms its prefix against it.
-    void llama.ensure().then((ok) => {
-      if (!ok) log('warn', 'llama-server not ready — generation layer will be silent until it is')
-      child.postMessage(init)
+    // Reviewer finding on commit cc11c18 (Task 6.7 MAJOR A): `getCustomerBrief()`
+    // must be read once `llamaReady` resolves (inside `sendInitWhenReady`),
+    // NOT here at 'spawn' time — 'spawn' fires machine-fast, long before a
+    // human operator affirms consent with a brief selection, so reading it
+    // eagerly here would almost always miss a real selection.
+    void sendInitWhenReady({
+      llamaReady: llama.ensure(),
+      buildBaseInit: () => {
+        // `playbookYaml` carries a filesystem path (directory of *.yaml/*.yml
+        // files, spec.md §3), not raw YAML text — `Playbook.fromYaml()` on
+        // the pipeline side resolves it against disk the same way this main
+        // process can. Passing a path (not file contents) keeps a multi-file
+        // playbook/ directory a single round trip instead of pre-merging N
+        // files by hand.
+        let playbookYaml = playbookDir()
+        if (!existsSync(playbookYaml)) {
+          log('warn', `playbook/ not found at ${playbookYaml} — retrieval layer disabled`)
+          playbookYaml = ''
+        }
+        return {
+          type: 'init',
+          sileroPath: paths.silero,
+          zipformerDir: paths.zipformer,
+          sonioxApiKey: sonioxApiKey(),
+          sonioxLanguageHints: SONIOX_LANGUAGE_HINTS,
+          sonioxWsUrl: sonioxWsUrl(),
+          llamaBase: paths.llamaBase,
+          systemPrompt: SYSTEM_PROMPT,
+          staticContext: STATIC_CONTEXT,
+          playbookYaml,
+          maxTurns: MAX_TURNS,
+          bench: false,
+          // Phase-6 AnalysisEngine (spec.md §7, Plans.md Task 6.4): only
+          // filesystem paths cross this boundary — KB/brief content is
+          // loaded fresh on the pipeline side (see src/pipeline/index.ts's
+          // init()).
+          knowledgeDir: knowledgeDir(),
+          customersDir: customersDir()
+        }
+      },
+      getCustomerBrief: deps.getCustomerBrief,
+      onLlamaNotReady: () =>
+        log('warn', 'llama-server not ready — generation layer will be silent until it is'),
+      send: (init) => child.postMessage(init)
     })
   })
 

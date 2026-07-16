@@ -107,6 +107,11 @@ function renderConsent(msg: ConsentRequiredMsg): void {
 // Customer-brief dropdown (spec.md §7, Plans.md Task 6.7): options are
 // rebuilt from main's listing each time consent-required arrives (once per
 // overlay load); "none" (value: '') always leads and is the default.
+// Reviewer finding (Task 6.7 MINOR D): `disabled` is derived from
+// `consentState` here too — not only set in the click handler below — so a
+// reload mid-call (operator already affirmed, `msg.state === 'affirmed'`)
+// renders the dropdown already locked, matching the no-mid-call-switching
+// invariant instead of relying solely on the one-time click event.
 function renderCustomerBriefOptions(names: readonly string[]): void {
   const options = customerBriefOptionsFor(names)
   customerBriefSelect.replaceChildren(
@@ -118,6 +123,7 @@ function renderCustomerBriefOptions(names: readonly string[]): void {
     })
   )
   customerBriefSelect.value = ''
+  customerBriefSelect.disabled = consentState === 'affirmed'
 }
 
 function renderRecIndicator(): void {

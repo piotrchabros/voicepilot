@@ -1,12 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
 import type { HealthMsg, Hint } from '@shared/types'
-import {
-  ConsentGate,
-  processorSetFor,
-  resolveAnnouncement,
-  sanitizeCustomerBriefSelection
-} from './consent'
+import { ConsentGate, handleConsentAffirm, resolveAnnouncement } from './consent'
 import { customersDir } from './config'
 import { loadEnv } from './env'
 import { startPipeline, type PipelineHandle } from './pipeline-host'
@@ -191,12 +186,21 @@ if (argv.includes('--list-devices')) {
     // Task 4.1): logs the affirmation, unblocks `startPipeline`'s capture
     // start, and restores click-through now that the affirm button no longer
     // needs real clicks. Task 6.7: also locks in the customer-brief
-    // selection (basename sanitized against the IPC payload) and records
-    // which processor set this affirmation covers — never the brief name
-    // itself (log hygiene: customer names are personal data).
+    // selection (basename sanitized + validated against the enumerated
+    // list) and records which processor set this affirmation covers — never
+    // the brief name itself (log hygiene: customer names are personal
+    // data). `handleConsentAffirm` (reviewer findings on commit cc11c18,
+    // MAJOR B + MINOR C) ignores a replayed event after the gate is already
+    // affirmed, and collapses an unknown/nonexistent brief name to "none"
+    // rather than letting it over-claim the soniox+llm consent scope.
     ipcMain.on('consent:affirm', (_e, rawCustomerBrief: string | null) => {
-      selectedCustomerBrief = sanitizeCustomerBriefSelection(rawCustomerBrief)
-      consentGate.affirm(processorSetFor(selectedCustomerBrief !== null))
+      const result = handleConsentAffirm(
+        consentGate,
+        rawCustomerBrief,
+        selectedCustomerBrief,
+        availableCustomerBriefs
+      )
+      selectedCustomerBrief = result.selection
       overlay?.setIgnoreMouseEvents(true, { forward: true })
     })
 

@@ -3,9 +3,11 @@ import {
   canStartCapture,
   CONSENT_ANNOUNCEMENT_PLACEHOLDER,
   ConsentGate,
+  handleConsentAffirm,
   processorSetFor,
   resolveAnnouncement,
   resolveInitCustomerBrief,
+  resolveKnownCustomerBrief,
   sanitizeCustomerBriefSelection,
   wireCaptureStart
 } from '../src/main/consent'
@@ -229,5 +231,73 @@ describe('sanitizeCustomerBriefSelection', () => {
   it('strips any path traversal via basename() — same defense as loadCustomerBrief', () => {
     expect(sanitizeCustomerBriefSelection('../../etc/passwd')).toBe('passwd')
     expect(sanitizeCustomerBriefSelection('../../secret')).toBe('secret')
+  })
+})
+
+// Reviewer findings on commit cc11c18 (Task 6.7): MAJOR B (replayed
+// consent:affirm must not swap the brief after affirmation) and MINOR C
+// (unknown/nonexistent brief names must not claim the second-processor
+// consent scope).
+
+describe('resolveKnownCustomerBrief', () => {
+  it('passes a known (enumerated) name through unchanged', () => {
+    expect(resolveKnownCustomerBrief('acme', ['acme', 'globex'])).toBe('acme')
+  })
+
+  it('collapses an unknown/nonexistent name to null — no compliance over-claim (Task 6.7 MINOR C)', () => {
+    expect(resolveKnownCustomerBrief('does-not-exist', ['acme', 'globex'])).toBeNull()
+  })
+
+  it('null stays null regardless of the known list', () => {
+    expect(resolveKnownCustomerBrief(null, ['acme'])).toBeNull()
+    expect(resolveKnownCustomerBrief(null, [])).toBeNull()
+  })
+})
+
+describe('handleConsentAffirm', () => {
+  it('affirms with a known brief selection — processors soniox+llm', () => {
+    const writer = vi.fn()
+    const gate = new ConsentGate({ writer })
+    const result = handleConsentAffirm(gate, 'acme', null, ['acme', 'globex'])
+
+    expect(result.selection).toBe('acme')
+    expect(result.record?.processors).toBe('soniox+llm')
+    expect(gate.state).toBe('affirmed')
+  })
+
+  it('an unknown brief name affirms as "none" — processors soniox, customerBrief stays undefined (Task 6.7 MINOR C)', () => {
+    const writer = vi.fn()
+    const gate = new ConsentGate({ writer })
+    const result = handleConsentAffirm(gate, 'does-not-exist', null, ['acme', 'globex'])
+
+    expect(result.selection).toBeNull()
+    expect(resolveInitCustomerBrief(result.selection)).toBeUndefined()
+    expect(result.record?.processors).toBe('soniox')
+  })
+
+  it('affirms with no selection — processors soniox (none-path safety)', () => {
+    const gate = new ConsentGate({ writer: vi.fn() })
+    const result = handleConsentAffirm(gate, null, null, ['acme'])
+
+    expect(result.selection).toBeNull()
+    expect(result.record?.processors).toBe('soniox')
+  })
+
+  it('a replayed consent:affirm after the gate is already affirmed does not change the selection or re-log (Task 6.7 MAJOR B)', () => {
+    const writer = vi.fn()
+    const gate = new ConsentGate({ writer })
+    const first = handleConsentAffirm(gate, 'acme', null, ['acme', 'globex'])
+    expect(first.record).not.toBeNull()
+    expect(writer).toHaveBeenCalledTimes(1)
+
+    // A second (replayed / malicious) IPC event tries to swap the brief
+    // after the operator already affirmed — must be ignored entirely: no
+    // new record, no selection change, so InitMsg can never diverge from
+    // what the (already-written) ConsentRecord.processors covers.
+    const replay = handleConsentAffirm(gate, 'globex', first.selection, ['acme', 'globex'])
+
+    expect(replay.selection).toBe('acme') // unchanged — still the original
+    expect(replay.record).toBeNull() // no new write
+    expect(writer).toHaveBeenCalledTimes(1) // still just the one log line
   })
 })

@@ -62,6 +62,22 @@ export function sanitizeCustomerBriefSelection(raw: string | null | undefined): 
   return basename(trimmed)
 }
 
+/**
+ * Validates a sanitized customer-brief selection against the enumerated
+ * `listCustomerBriefs()` output (reviewer finding on commit cc11c18, Task
+ * 6.7 MINOR C): an unknown/nonexistent basename must not silently claim the
+ * second-processor consent scope — `processorSetFor` would over-report
+ * `soniox+llm` for a brief that doesn't actually exist. Unknown names
+ * collapse to `null` ("none"), same as if nothing had been selected.
+ */
+export function resolveKnownCustomerBrief(
+  sanitized: string | null,
+  known: readonly string[]
+): string | null {
+  if (sanitized === null) return null
+  return known.includes(sanitized) ? sanitized : null
+}
+
 /** What gets logged on affirmation. Timestamp + session id + the processor
  *  set covered — deliberately never the customer-brief name itself (spec.md
  *  §4 item 4 log hygiene: personal data stays out of this record too). */
@@ -164,6 +180,43 @@ export class ConsentGate {
     }
     this.waiters.push(cb)
   }
+}
+
+/**
+ * State-mutation logic behind the `consent:affirm` IPC handler in
+ * `index.ts` (reviewer findings on commit cc11c18, Task 6.7: MAJOR B +
+ * MINOR C). Extracted as a pure function (no ipcMain/overlay dependency) so
+ * both fixes are unit-testable directly:
+ *
+ * - MAJOR B: once `gate.state === 'affirmed'`, a replayed/late
+ *   `consent:affirm` IPC event must not change the locked-in selection —
+ *   `ConsentGate.affirm()` is already idempotent for the *logged* record,
+ *   but without this guard the caller's `selectedCustomerBrief` variable
+ *   (which feeds `InitMsg.customerBrief`) could still be reassigned to a
+ *   brief the operator never actually affirmed for.
+ * - MINOR C: `resolveKnownCustomerBrief` rejects any selection that isn't
+ *   in the enumerated `known` list before it can influence
+ *   `processorSetFor`'s `soniox+llm` claim.
+ *
+ * Returns `record: null` when the replay guard fired (nothing new was
+ * logged) so the caller can tell "already affirmed, ignored" apart from "a
+ * fresh affirmation just happened".
+ */
+export function handleConsentAffirm(
+  gate: ConsentGate,
+  rawCustomerBrief: string | null | undefined,
+  currentSelection: string | null,
+  knownCustomerBriefs: readonly string[]
+): { selection: string | null; record: ConsentRecord | null } {
+  if (gate.state === 'affirmed') {
+    return { selection: currentSelection, record: null }
+  }
+  const selection = resolveKnownCustomerBrief(
+    sanitizeCustomerBriefSelection(rawCustomerBrief),
+    knownCustomerBriefs
+  )
+  const record = gate.affirm(processorSetFor(selection !== null))
+  return { selection, record }
 }
 
 /**
