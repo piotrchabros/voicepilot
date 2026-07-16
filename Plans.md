@@ -58,6 +58,22 @@
 | 5.6 | [lane:gate] [tdd:required] Teardown/reconnect: status callback と media stop の冪等 teardown、Soniox 再接続 buffer 上限の整合（現 10s vs 計画 2s → spec 決定を反映）、health 経路 | 二重 stop / race / reconnect のテスト green | 5.4 | cc:TODO |
 | 5.7 | [lane:release] [tdd:skip:release-gate] E2E 実呼検証 + PL WER 測定（8kHz A vs 16kHz B）+ evidence pack → closeout | 実呼で card 表示 <1.5s、WER 比較レポートが docs に存在 | 5.5, 5.6 | cc:TODO |
 
+## Phase 6: Knowledge base + analysis panel（spec.md §7）
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 6.1 | [lane:gate] [tdd:required] KB loader + per-section retrieval: `knowledge/**/*.md` を `##` 見出しで chunk、playbook の trigram 関数を再利用した per-section top-K。`customers/<name>.md` は丸ごと読み込み（always-injected、retrieval 対象外）。emotion-inference 指示の denylist lint を load 時に実行 | PL fixture corpus（語形変化 query / top-K / MIN_SCORE / denylist 検出）green、`knowledge/` 欠落時は warn + 空で安全 | 3.2 | cc:WIP |
+| 6.2 | [lane:gate] [tdd:required] `TranscriptState.renderRollingWindow()`: cloud 用 rolling window renderer（spec.md §3 の許可条項）。cache-locked `renderPrompt()` と状態共有・変更なしを invariant テストで固定 | window 上限テスト + `renderPrompt()` 出力不変テスト green | - | cc:WIP |
+| 6.3 | [lane:gate] [tdd:required] Cloud LLM client: `AnalysisLlm` narrow iface + `Generation` 互換 cancel（AbortController）。`LLM_API_URL`/`LLM_API_KEY`/region/deployment-class を .env + zod、EU allowlist boot assertion（deployment class 込み、https 必須、非 EU で起動拒否）。テストは `FakeCloudClient` のみ（CI で実 API 禁止） | 非 EU / plain-http URL で boot 失敗テスト green、cancel contract テスト green | 1.2 | cc:WIP |
+| 6.4 | [lane:gate] [tdd:required] `AnalysisEngine`（HintEngine の sibling、src/pipeline 内・transport-agnostic）: settled prospect turn-end trigger、~1.5s debounce、cancel-previous（queue 禁止）、閉スキーマ出力 `{stage, suggested_questions≤3, next_steps?}`（zod validate、非準拠は drop）、no-sentiment guard を prompt と output 両方に適用（3.4 の拡張）、"as of turn N" stamp、cloud 送信 feature flag（default OFF）、log hygiene（HTTP error body 含む） | cancel テスト（10 連投→1 生存）、no-sentiment prompt/output テスト、log-hygiene テスト、flag OFF 時 network 呼び出し 0 件テスト green | 6.1, 6.2, 6.3 | cc:TODO |
+| 6.5 | [lane:gate] [tdd:required] `AnalysisMsg` wire + IPC: `FromPipeline` に追加（plain-serializable、Phase 5 の WS bridge 互換）、pipeline-host routing、`CopilotBridge.onAnalysis` + preload | 型 + routing + bridge のテスト green | 6.4 | cc:TODO |
+| 6.6 | [lane:gate] [tdd:skip:ui-manual-qa] Analysis panel window: 別 BrowserWindow（`setContentProtection` 必須、既存 overlay の recipe 再利用）、default hidden、operator toggle + 手動 refresh-now、stale 時 grey-out、cloud 処理インジケータ表示。既存 hint card は無変更 | 手動 QA チェックリスト pass（content-protection A/B、default hidden、card 無変更、スクリーンショット evidence） | 6.5 | cc:TODO |
+| 6.7 | [lane:gate] [tdd:required] Customer brief 選択: pre-Start consent 画面に dropdown（default: none）、`InitMsg` に brief フィールド追加、consent affirmation 記録に processor set（`soniox` / `soniox+llm`）を含める（4.1 の拡張） | brief 注入テスト + none-path 安全テスト + affirmation 記録テスト green | 6.1, 4.1 | cc:TODO |
+| 6.8 | [lane:gate] [tdd:skip:human-legal] Compliance 拡張: `docs/compliance.md` に LLM processor 行を追加（DPA、retention/ZDR 実態、per-project region 証跡、subprocessor、consent 範囲の法務確認、brief の lawful-basis note、KB curation rule）。`customers/` を .gitignore に追加、brief テンプレート（data-minimization 注記付き）作成。**ledger green まで real-prospect への cloud analysis 禁止（flag OFF 維持）** | ledger 行が status+evidence 付きで存在、.gitignore entry、テンプレート存在 | - | cc:WIP |
+| 6.9 | [lane:gate] [tdd:required] Bench/metrics + Phase 5 merge note: analysis latency p50/p95 + tokens/call を bench に追加（`BenchStage` とは分離）、card p95 が baseline 不変であることを検証。AnalysisEngine/`AnalysisMsg` が 5.1 service lift に乗る旨を docs に記録 | bench 出力に analysis p50/p95 + tokens/call、card p95 不変 evidence、merge note 存在 | 6.4, 6.5 | cc:TODO |
+
+Phase 6 の v1 除外（recorded、spec.md §7）: panel 内 objection responses（hint card が SSOT）、per-turn 自動 refresh、post-call summary、embeddings retrieval。
+
 ---
 
 ## Stage gate 対応
@@ -77,3 +93,8 @@
 - PL WER @8kHz telephony（5.7 の kill-check、A の実用性判断）
 - Tier-2 生成の実測 latency（3.3 の計測で解消）
 - Consent 文言（法務、1.3 — agent は文言を発明しない）
+- Cloud LLM vendor/region の選定（human 決定。2026-07 調査: Anthropic 直 API に EU inference geo なし — Claude の EU 処理は Bedrock/Vertex EU region 経由。OpenAI EU residency は sales-gated + 新規 project のみ。Azure は EU Data Zone / regional deployment のみ可（Global Standard 不可）。Mistral は EU 社だが ZDR は Scale plan のみ。6.3 の allowlist は config 駆動とし、選定後に pin） — 6.8 で解消
+- 選定 vendor の ZDR/retention 実条件（"stateless 呼び出し" ≠ 先方 zero retention、abuse-monitoring 窓が実 retention） — 6.8
+- 既存 consent 文言が第二 processor（LLM）+ brief data を包含するか（blocked(human)、法務） — 6.8
+- Analysis の実測 latency / tokens per call / per-call cost — 6.9 で計測
+- KB 実サイズでの trigram retrieval 再現率（≤200 sections 想定。超過・品質不足時のみ embeddings を別決定で再検討） — 6.9 以降

@@ -4,7 +4,7 @@ Status: v1 draft, 2026-07-15. Precedence: this file > sub-specs > Plans.md.
 Input: `realtime-sales-assistant-plan.md` (proposal), reconciled against the
 live-verified Electron pipeline by a 3-perspective review (Architecture/Product,
 Security/Compliance, QA/Skeptic). Where this spec deviates from the proposal,
-this spec wins — deviations are listed in §7.
+this spec wins — deviations are listed in §8.
 
 ## 1. Product
 
@@ -89,6 +89,19 @@ nothing about transports.
    carry a session token. Secrets via `.env` + zod fail-fast; `.soniox-key`
    file fallback is deprecated.
 7. ngrok/cloudflared is a dev-only third-party processor; documented as such.
+8. **Cloud analysis LLM (Phase 6) is a second data processor.** Endpoint from
+   config (`LLM_API_URL` + explicit region/deployment-class fields); boot
+   asserts the resolved endpoint against a documented EU allowlist and refuses
+   to start otherwise — the allowlist must encode deployment class, not just
+   hostname (Azure "Global Standard" / Vertex "global" routes are
+   disqualifying even on EU-looking hosts). HTTPS only. DPA, retention/ZDR
+   terms ("stateless on our side" ≠ zero retention on theirs — abuse-monitoring
+   windows are the real retention), per-project region-pinning evidence, and
+   subprocessor review are ledger rows in `docs/compliance.md`; cloud sends sit
+   behind a feature flag (default **off**) until those rows are green. Consent
+   scope for the second processor + customer-brief data is a legal
+   deliverable; the per-call affirmation record lists the processor set it
+   covered (`soniox` vs `soniox+llm`).
 
 ## 5. Operator UI
 
@@ -99,6 +112,17 @@ recording indicator. The existing content-protected overlay remains the
 Transport-B surface; a browser operator page is added only when Transport A
 ships (they share the suggestion payload).
 
+Phase 6 adds a second, separately content-protected **analysis panel** window.
+It is hidden by default and shown by explicit operator toggle; refresh happens
+on toggle / manual "refresh now" (debounced auto-refresh is a recorded later
+option, not v1). Fixed skeleton, stable section ordering, deltas highlighted:
+one-line call-stage indicator + up to three suggested next questions, stamped
+"as of turn N" and greyed when stale, plus a visible cloud-processing
+indicator (analogous to REC). Objection responses stay exclusively on the hint
+card — the panel is non-directive context, never a competing "say this now"
+surface. The tiny hint card stays byte-for-byte untouched, and the panel's
+generation path must never delay it.
+
 ## 6. Process topology
 
 Now: everything stays in the Electron app (sidecar → main → utilityProcess).
@@ -106,7 +130,51 @@ When Transport A starts: lift `src/pipeline` into a standalone Node service
 (Fastify; serves TwiML webhooks, media WS, Electron WS, UI WS) and the Electron
 app becomes a thin capture-forwarder client. Not before.
 
-## 7. Recorded deviations from `realtime-sales-assistant-plan.md`
+## 7. Knowledge base & analysis engine (Phase 6)
+
+- **KB = local files.** `knowledge/**/*.md` (sales closing practices, strategy,
+  sales-psychology notes, product/service info), chunked by `##` heading;
+  retrieval is char-trigram cosine per section, top-K (same Polish-inflection
+  rationale as §3; embeddings stay rejected at ≤~200 sections — revisit only
+  with recall evidence, as its own recorded decision). `customers/<name>.md`
+  briefs are operator-selected at call start via a dropdown on the pre-Start
+  consent screen (default: none) and always injected — never retrieved, never
+  committed to git, never copied into derived stores (no untracked
+  personal-data copies; deletion = delete the file).
+- **KB content rule (EU AI Act):** psychology notes may describe techniques
+  and language, never instructions to detect or exploit the prospect's
+  emotional state; a denylist lint on KB files enforces this at load. No
+  rapport/mood/engagement scores, no personality profiling — of prospect *or*
+  rep (Art 5(1)(f): rep-side emotion inference is the workplace tripwire; any
+  rep-side analysis stays behavioral, e.g. talk-time, never emotional).
+- **`AnalysisEngine` is a sibling of `HintEngine`** in `src/pipeline`
+  (transport-agnostic; rides the Phase-5 service lift unchanged). Trigger:
+  settled prospect turn-end only, debounced ~1.5s (separate from the hint
+  debounce); cancel-previous, never queue. Prompt is rendered via a new
+  `TranscriptState.renderRollingWindow()` — the cache-locked `renderPrompt()`
+  is not touched or shared. Only the rolling window + top-K KB snippets + the
+  selected brief leave the device, never the whole KB.
+- **Closed output schema (zod):** `{ stage, suggested_questions (≤3),
+  next_steps? }` — no free-form prospect-state field. The §1 no-emotion
+  prohibition is carried in the analysis prompt AND enforced on the output
+  path: non-conforming or sentiment-bearing responses are dropped, not
+  rendered. Prompts frame output as legitimate persuasion/objection handling;
+  deceptive claims, false urgency, and vulnerability-exploiting tactics are
+  prohibited wording.
+- **Latency/cost:** asynchronous best-effort surface — never shares or delays
+  the card budget (§3). Bench reports analysis p50/p95 and tokens/call
+  separately from `BenchStage`; card p95 must be unchanged vs baseline. A
+  hard per-call token cap applies.
+- **Log hygiene (§4.4) extends** to analysis prompts, retrieved KB snippets,
+  brief content, analysis output, and HTTP-client error bodies (a failed LLM
+  call must not dump its request payload into logs).
+- **Recorded v1 exclusions** (deviations from the original feature ask):
+  objection-break responses in the panel (duplicate of the hint card —
+  contradiction risk), continuous per-turn refresh (untrackable motion,
+  staleness churn), post-call summary and stage-gated next-steps expansion
+  (good later options, not v1).
+
+## 8. Recorded deviations from `realtime-sales-assistant-plan.md`
 
 - Seam frame format Float32 (not PCM16); envelope adapts to existing IPC, no
   new WS bridge inside Electron for v1.
