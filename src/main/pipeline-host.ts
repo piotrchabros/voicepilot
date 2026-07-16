@@ -5,6 +5,8 @@ import type { AudioFrame } from '@shared/audio-source'
 import type { FromPipeline, HealthMsg, Hint, InitMsg, LogMsg } from '@shared/types'
 import {
   checkModels,
+  customersDir,
+  knowledgeDir,
   paths,
   playbookDir,
   sidecarBinary,
@@ -132,7 +134,12 @@ export function startPipeline(deps: PipelineDeps): PipelineHandle {
       playbookYaml,
       maxTurns: MAX_TURNS,
       bench: false,
-      ...(customerBrief !== undefined && { customerBrief })
+      ...(customerBrief !== undefined && { customerBrief }),
+      // Phase-6 AnalysisEngine (spec.md §7, Plans.md Task 6.4): only
+      // filesystem paths cross this boundary — KB/brief content is loaded
+      // fresh on the pipeline side (see src/pipeline/index.ts's init()).
+      knowledgeDir: knowledgeDir(),
+      customersDir: customersDir()
     }
     // Bring llama up before the pipeline warms its prefix against it.
     void llama.ensure().then((ok) => {

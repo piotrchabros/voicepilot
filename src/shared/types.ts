@@ -77,6 +77,16 @@ export interface InitMsg {
    *  the analysis prompt is the (future) 6.4 AnalysisEngine's job; this
    *  field only carries the selected name through init. */
   readonly customerBrief?: string
+  /** `knowledge/**\/*.md` directory (spec.md §7, Plans.md Task 6.1/6.4): the
+   *  Phase-6 AnalysisEngine loads it once at init via `KnowledgeBase.load()`.
+   *  A missing/empty path yields an empty KB — never a crash. */
+  readonly knowledgeDir?: string
+  /** `customers/<name>.md` directory (spec.md §7, Plans.md Task 6.1/6.4/6.7),
+   *  paired with `customerBrief`'s basename so the AnalysisEngine can load
+   *  the selected brief's content via `loadCustomerBrief()`. Only a
+   *  filesystem path crosses this boundary — brief content itself is
+   *  loaded fresh on the pipeline side, never pre-read into InitMsg. */
+  readonly customersDir?: string
 }
 
 /** main -> pipeline: lifecycle. */

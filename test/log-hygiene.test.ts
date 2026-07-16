@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Hint } from '@shared/types'
-import { formatClassificationLog, formatHintLog, formatTurnEndLog } from '../src/pipeline/index'
+import type { Analysis } from '../src/pipeline/analysis-engine'
+import {
+  formatAnalysisLog,
+  formatClassificationLog,
+  formatHintLog,
+  formatTurnEndLog
+} from '../src/pipeline/index'
 
 // spec.md §4.4 (Compliance & security, item 4 "Log hygiene"): no transcript/hint
 // text in logs outside explicit debug mode; production default logs contain no
@@ -57,6 +63,31 @@ describe('log hygiene (spec.md §4.4)', () => {
       // No transcript text of any kind should ever appear in this line.
       expect(line).not.toContain(SECRET_TRANSCRIPT)
       expect(line).not.toContain(SECRET_HINT_TEXT)
+    })
+  })
+
+  // spec.md §7 "Log hygiene (§4.4) extends" to analysis prompts, retrieved KB
+  // snippets, brief content, and analysis output (Plans.md Task 6.4): the
+  // rendered analysis (stage/questions/next-steps) must never appear in a
+  // production-default log line, same rule as hint text above.
+  describe('formatAnalysisLog', () => {
+    const analysis: Analysis = {
+      stage: 'objection',
+      suggestedQuestions: [SECRET_HINT_TEXT],
+      asOfTurn: 3
+    }
+
+    it('never includes analysis content when debug is off', () => {
+      const line = formatAnalysisLog(analysis, false)
+      expect(line).toBeNull()
+    })
+
+    it('includes analysis content only when debug is explicitly on', () => {
+      const line = formatAnalysisLog(analysis, true)
+      expect(line).not.toBeNull()
+      expect(line).toContain(SECRET_HINT_TEXT)
+      expect(line).toContain('objection')
+      expect(line).toContain('3')
     })
   })
 })

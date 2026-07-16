@@ -71,7 +71,18 @@ const envSchema = z.object({
    * rejected by default at boot (spec.md §4 item 8), same fail-closed
    * mechanism as LLM_EU_HOST_ALLOWLIST.
    */
-  LLM_EU_DEPLOYMENT_CLASSES: z.string().trim().optional()
+  LLM_EU_DEPLOYMENT_CLASSES: z.string().trim().optional(),
+  /**
+   * AnalysisEngine cloud-send feature flag (spec.md §7, Plans.md Task 6.4).
+   * Fail-closed, default OFF: the pipeline-side engine
+   * (src/pipeline/analysis-engine.ts's `resolveAnalysisEnabledFlag`, which
+   * reads `process.env` directly — utilityProcess.fork inherits the parent
+   * env, same pattern as COPILOT_DEBUG) only calls the cloud LLM when this
+   * is exactly `'1'` AND `resolveCloudLlmConfig` (Task 6.3) resolved.
+   * Declared here purely for `.env` documentation/fail-fast consistency;
+   * pipeline-side resolution is independent of this schema.
+   */
+  LLM_ANALYSIS_ENABLED: BOOLEAN_FLAG.optional()
 })
 
 export type Env = z.infer<typeof envSchema>

@@ -48,6 +48,19 @@ export function customersDir(): string {
 }
 
 /**
+ * `knowledge/**\/*.md` (sales-closing practices, strategy, sales-psychology
+ * notes, product/service info — spec.md §7, Plans.md Task 6.1/6.4). Same
+ * app-path-then-cwd resolution as `playbookDir()`/`customersDir()` above.
+ * `KnowledgeBase.load()` (src/pipeline/knowledge.ts) is empty-safe against a
+ * missing directory, so this never needs its own existence check here.
+ */
+export function knowledgeDir(): string {
+  const atRoot = join(app.getAppPath(), 'knowledge')
+  if (existsSync(atRoot)) return atRoot
+  return join(process.cwd(), 'knowledge')
+}
+
+/**
  * Soniox API key: SONIOX_API_KEY in `.env` (validated fail-fast by env.ts —
  * Plans.md 1.2 / spec.md §4.6), or a git-ignored `.soniox-key` file at the
  * project root as a deprecated fallback. Null when absent — the pipeline

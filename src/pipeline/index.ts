@@ -14,9 +14,13 @@ import {
   speakerOf,
   type ToPipeline
 } from '@shared/types'
+import { type Analysis, AnalysisEngine, resolveAnalysisEnabledFlag } from './analysis-engine'
 import { classifyTurn } from './classifier'
+import type { CloudLlmEnv } from './cloud-llm-client'
+import { CloudLlmClient, resolveCloudLlmConfig } from './cloud-llm-client'
 import { EchoDetector, type EchoSpeaker } from './echo-detector'
 import { HintEngine } from './hint-engine'
+import { KnowledgeBase, loadCustomerBrief } from './knowledge'
 import { LlamaClient } from './llama-client'
 import { Playbook } from './playbook'
 import { SherpaStt } from './stt'
@@ -70,6 +74,20 @@ export function formatClassificationLog(
   return debug ? `classify[THEM] label=${label} confidence=${confidence.toFixed(2)}` : null
 }
 
+// spec.md §7 "Log hygiene (§4.4) extends" to analysis prompts, retrieved KB
+// snippets, brief content, and analysis output: the rendered Analysis must
+// never appear in a production-default log line — only the closed-schema
+// summary (never the raw KB/brief/transcript text feeding it) is ever
+// eligible to log, and only in debug mode.
+export function formatAnalysisLog(analysis: Analysis, debug: boolean): string | null {
+  if (!debug) return null
+  return (
+    `analysis[${analysis.stage}] asOfTurn=${analysis.asOfTurn} ` +
+    `questions=${JSON.stringify(analysis.suggestedQuestions)} ` +
+    `nextSteps=${JSON.stringify(analysis.nextSteps ?? [])}`
+  )
+}
+
 interface LegRuntime {
   who: Speaker
   vad: SileroVad
@@ -91,6 +109,10 @@ interface LegRuntime {
 const DEBUG = process.env['COPILOT_DEBUG'] === '1'
 
 let engine: HintEngine | null = null
+// Phase-6 AnalysisEngine (spec.md §7, Plans.md Task 6.4) — best-effort side
+// panel, entirely optional. `null` means either the feature flag is off, no
+// cloud analysis LLM is configured, or init() hasn't run yet.
+let analysisEngine: AnalysisEngine | null = null
 let state: TranscriptState | null = null
 const legs = new Map<Leg, LegRuntime>()
 // spec.md §5.4: watches for the rep's own voice leaking into the loopback
@@ -121,6 +143,47 @@ async function init(cfg: InitMsg): Promise<void> {
       },
       clock
     )
+
+    // Phase-6 AnalysisEngine (spec.md §7, Plans.md Task 6.4): entirely
+    // optional, best-effort side panel. A misconfigured/unavailable cloud
+    // LLM or an unset LLM_ANALYSIS_ENABLED flag must never block the hint
+    // pipeline above, so its resolution is wrapped separately from this
+    // function's own outer try/catch (which would otherwise treat any
+    // failure here as fatal to the whole pipeline).
+    try {
+      const analysisFlag = resolveAnalysisEnabledFlag(process.env['LLM_ANALYSIS_ENABLED'])
+      const cloudConfig = resolveCloudLlmConfig(process.env as CloudLlmEnv)
+      if (cloudConfig !== null) {
+        const kb = KnowledgeBase.load(cfg.knowledgeDir ?? '')
+        // Only a filesystem path (customersDir) and the operator-selected
+        // basename (customerBrief, Task 6.7) cross the InitMsg boundary —
+        // content is loaded fresh here, never copied into any derived store.
+        const customerBriefContent =
+          cfg.customerBrief !== undefined && cfg.customersDir !== undefined
+            ? loadCustomerBrief(cfg.customersDir, cfg.customerBrief)
+            : null
+        analysisEngine = new AnalysisEngine(
+          new CloudLlmClient(cloudConfig),
+          kb,
+          state,
+          (analysis) => {
+            const analysisLog = formatAnalysisLog(analysis, DEBUG)
+            if (analysisLog !== null) log('info', analysisLog)
+          },
+          { customerBriefContent, enabled: analysisFlag }
+        )
+      } else if (analysisFlag) {
+        log(
+          'warn',
+          'LLM_ANALYSIS_ENABLED=1 but no cloud analysis LLM is configured — analysis engine disabled'
+        )
+      }
+    } catch (err) {
+      // Log hygiene (spec.md §4.4/§7): never interpolate anything but the
+      // error's own message — never transcript/KB/brief content, which this
+      // catch path has no access to anyway.
+      log('warn', `analysis engine disabled: ${err instanceof Error ? err.message : String(err)}`)
+    }
 
     // One VAD + STT per leg. Mic = ME, system = THEM. Soniox (cloud, Polish)
     // when a key is configured; local English zipformer otherwise.
@@ -161,6 +224,7 @@ async function init(cfg: InitMsg): Promise<void> {
   } catch (err) {
     log('error', `pipeline init failed: ${err instanceof Error ? err.message : String(err)}`)
     engine = null
+    analysisEngine = null
   }
 }
 
@@ -253,6 +317,12 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
         if (classificationLog !== null) log('info', classificationLog)
       }
       engine.onTurnEnd(leg.who, finalText)
+      // AnalysisEngine.onTurnEnd (spec.md §7, Plans.md Task 6.4) internally
+      // gates on `who === 'THEM'` and a non-empty settled turn — safe to
+      // call unconditionally here, same pattern as HintEngine.onTurnEnd
+      // above (which internally gates via TranscriptState.settle regardless
+      // of speaker).
+      analysisEngine?.onTurnEnd(leg.who, finalText)
       break
     }
   }
@@ -260,6 +330,7 @@ async function processFrame(leg: LegRuntime, samples: Float32Array): Promise<voi
 
 function shutdown(): void {
   engine?.shutdown()
+  analysisEngine?.shutdown()
   for (const leg of legs.values()) leg.stt.close()
   legs.clear()
 }
