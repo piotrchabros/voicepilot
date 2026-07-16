@@ -4,84 +4,157 @@ import {
   assertEuLlmEndpoint,
   CloudLlmClient,
   isEuDeploymentClass,
+  parseEuDeploymentClassAllowlist,
   parseEuHostAllowlist,
   resolveCloudLlmConfig
 } from '../src/pipeline/cloud-llm-client'
 
 // spec.md §4 item 8 / Plans.md Task 6.3: the cloud analysis LLM is a second
-// data processor and its EU allowlist is config-driven (vendor unknown —
-// Plans.md unknown_data, docs/compliance.md "Cloud analysis LLM (Phase 6)
-// gate"), unlike Soniox's single hardcoded EU host. Boot must refuse to
-// start on any non-EU / non-https / unconfigured-allowlist / non-EU
+// data processor and its EU allowlists (host + deployment-class) are
+// config-driven (vendor unknown — Plans.md unknown_data,
+// docs/compliance.md "Cloud analysis LLM (Phase 6) gate"), unlike Soniox's
+// single hardcoded EU host. Both allowlists must be **closed allowlists of
+// known-good values** — fail CLOSED: a novel value that merely fails to look
+// like a known-bad pattern must still be rejected. Boot must refuse to start
+// on any non-EU / non-https / unconfigured-allowlist / non-allowlisted
 // deployment-class combination.
 
 const EU_URL = 'https://llm-eu.example.com/v1/analyze'
 const EU_ALLOWLIST = ['llm-eu.example.com']
 const EU_CLASS = 'eu-data-zone'
+const EU_CLASS_ALLOWLIST = ['eu-data-zone', 'eu-central-1']
 
 describe('assertEuLlmEndpoint', () => {
-  it('accepts an https URL whose host is in the allowlist with an EU deployment class', () => {
-    expect(assertEuLlmEndpoint(EU_URL, EU_CLASS, EU_ALLOWLIST)).toBe(EU_URL)
+  it('accepts an https URL whose host is in the allowlist with an allowlisted deployment class', () => {
+    expect(assertEuLlmEndpoint(EU_URL, EU_CLASS, EU_ALLOWLIST, EU_CLASS_ALLOWLIST)).toBe(EU_URL)
   })
 
   it('rejects a plain http:// URL even against an allowlisted host', () => {
     expect(() =>
-      assertEuLlmEndpoint('http://llm-eu.example.com/v1/analyze', EU_CLASS, EU_ALLOWLIST)
+      assertEuLlmEndpoint(
+        'http://llm-eu.example.com/v1/analyze',
+        EU_CLASS,
+        EU_ALLOWLIST,
+        EU_CLASS_ALLOWLIST
+      )
     ).toThrow(/https/i)
   })
 
   it('rejects a host that is not in the allowlist (non-EU URL)', () => {
     expect(() =>
-      assertEuLlmEndpoint('https://llm-us.example.com/v1/analyze', EU_CLASS, EU_ALLOWLIST)
+      assertEuLlmEndpoint(
+        'https://llm-us.example.com/v1/analyze',
+        EU_CLASS,
+        EU_ALLOWLIST,
+        EU_CLASS_ALLOWLIST
+      )
     ).toThrow(/allowlist/i)
   })
 
-  it('rejects when the allowlist is empty', () => {
-    expect(() => assertEuLlmEndpoint(EU_URL, EU_CLASS, [])).toThrow(/allowlist/i)
+  it('rejects a host that only appears as a suffix of a longer, attacker-controlled hostname', () => {
+    // "llm-eu.example.com" must match exactly — a lookalike domain that merely
+    // ends with the allowlisted host (e.g. as a subdomain trick) must still refuse.
+    expect(() =>
+      assertEuLlmEndpoint(
+        'https://llm-eu.example.com.attacker.io/v1/analyze',
+        EU_CLASS,
+        EU_ALLOWLIST,
+        EU_CLASS_ALLOWLIST
+      )
+    ).toThrow(/allowlist/i)
+  })
+
+  it('rejects when the host allowlist is empty', () => {
+    expect(() => assertEuLlmEndpoint(EU_URL, EU_CLASS, [], EU_CLASS_ALLOWLIST)).toThrow(
+      /allowlist/i
+    )
+  })
+
+  it('rejects when the deployment-class allowlist is empty (fail-closed, mirrors the host allowlist)', () => {
+    expect(() => assertEuLlmEndpoint(EU_URL, EU_CLASS, EU_ALLOWLIST, [])).toThrow(/deployment/i)
   })
 
   it('rejects a "global" deployment class even on an allowlisted EU host', () => {
-    expect(() => assertEuLlmEndpoint(EU_URL, 'global', EU_ALLOWLIST)).toThrow(/deployment/i)
-  })
-
-  it('rejects a "Global Standard"-style deployment class', () => {
-    expect(() => assertEuLlmEndpoint(EU_URL, 'Global Standard', EU_ALLOWLIST)).toThrow(
+    expect(() => assertEuLlmEndpoint(EU_URL, 'global', EU_ALLOWLIST, EU_CLASS_ALLOWLIST)).toThrow(
       /deployment/i
     )
   })
 
+  it('rejects a "Global Standard"-style deployment class', () => {
+    expect(() =>
+      assertEuLlmEndpoint(EU_URL, 'Global Standard', EU_ALLOWLIST, EU_CLASS_ALLOWLIST)
+    ).toThrow(/deployment/i)
+  })
+
   it('rejects a missing/blank deployment class', () => {
-    expect(() => assertEuLlmEndpoint(EU_URL, '', EU_ALLOWLIST)).toThrow(/deployment/i)
+    expect(() => assertEuLlmEndpoint(EU_URL, '', EU_ALLOWLIST, EU_CLASS_ALLOWLIST)).toThrow(
+      /deployment/i
+    )
+  })
+
+  it('rejects a novel deployment-class value that is neither "global"-shaped nor in the allowlist — fail-closed, not a denylist', () => {
+    expect(() =>
+      assertEuLlmEndpoint(
+        EU_URL,
+        'some-brand-new-vendor-region-nobody-configured',
+        EU_ALLOWLIST,
+        EU_CLASS_ALLOWLIST
+      )
+    ).toThrow(/deployment/i)
   })
 
   it('rejects a garbage (non-URL-shaped) apiUrl', () => {
-    expect(() => assertEuLlmEndpoint('not-a-url', EU_CLASS, EU_ALLOWLIST)).toThrow()
+    expect(() =>
+      assertEuLlmEndpoint('not-a-url', EU_CLASS, EU_ALLOWLIST, EU_CLASS_ALLOWLIST)
+    ).toThrow()
   })
 })
 
-describe('isEuDeploymentClass / parseEuHostAllowlist', () => {
-  it('accepts explicit EU-region-shaped deployment classes', () => {
-    expect(isEuDeploymentClass('eu-central-1')).toBe(true)
-    expect(isEuDeploymentClass('EU Data Zone')).toBe(true)
+describe('isEuDeploymentClass / parseEuHostAllowlist / parseEuDeploymentClassAllowlist', () => {
+  it('accepts a deployment class present in the allowlist, case/whitespace-insensitively', () => {
+    expect(isEuDeploymentClass('eu-central-1', EU_CLASS_ALLOWLIST)).toBe(true)
+    expect(isEuDeploymentClass('EU-DATA-ZONE', EU_CLASS_ALLOWLIST)).toBe(true)
+    expect(isEuDeploymentClass('  eu-central-1  ', EU_CLASS_ALLOWLIST)).toBe(true)
   })
 
-  it('rejects global-style classes case-insensitively', () => {
-    expect(isEuDeploymentClass('global')).toBe(false)
-    expect(isEuDeploymentClass('Global Standard')).toBe(false)
-    expect(isEuDeploymentClass('GLOBAL')).toBe(false)
+  it('rejects a novel value not present in the allowlist — closed allowlist, not a "global" denylist', () => {
+    expect(isEuDeploymentClass('eu-west-9-nobody-configured', EU_CLASS_ALLOWLIST)).toBe(false)
   })
 
-  it('parses a comma-separated allowlist, trimming and lowercasing', () => {
+  it('rejects global-style classes when they are not themselves allowlisted', () => {
+    expect(isEuDeploymentClass('global', EU_CLASS_ALLOWLIST)).toBe(false)
+    expect(isEuDeploymentClass('Global Standard', EU_CLASS_ALLOWLIST)).toBe(false)
+  })
+
+  it('rejects blank input regardless of allowlist contents', () => {
+    expect(isEuDeploymentClass('', EU_CLASS_ALLOWLIST)).toBe(false)
+    expect(isEuDeploymentClass('   ', EU_CLASS_ALLOWLIST)).toBe(false)
+  })
+
+  it('rejects everything when the allowlist itself is empty', () => {
+    expect(isEuDeploymentClass('eu-central-1', [])).toBe(false)
+  })
+
+  it('parses a comma-separated host allowlist, trimming and lowercasing', () => {
     expect(parseEuHostAllowlist(' llm-eu.example.com , OTHER-EU.example.com ')).toEqual([
       'llm-eu.example.com',
       'other-eu.example.com'
     ])
   })
 
-  it('treats unset/blank allowlist as empty', () => {
+  it('parses a comma-separated deployment-class allowlist, trimming and lowercasing', () => {
+    expect(parseEuDeploymentClassAllowlist(' eu-central-1 , EU Data Zone ')).toEqual([
+      'eu-central-1',
+      'eu data zone'
+    ])
+  })
+
+  it('treats unset/blank allowlists as empty', () => {
     expect(parseEuHostAllowlist(undefined)).toEqual([])
     expect(parseEuHostAllowlist('')).toEqual([])
     expect(parseEuHostAllowlist('   ')).toEqual([])
+    expect(parseEuDeploymentClassAllowlist(undefined)).toEqual([])
+    expect(parseEuDeploymentClassAllowlist('')).toEqual([])
   })
 })
 
@@ -94,23 +167,36 @@ describe('resolveCloudLlmConfig', () => {
     expect(() => resolveCloudLlmConfig({ LLM_API_URL: EU_URL })).toThrow(/LLM_API_KEY/)
   })
 
-  it('throws when LLM_API_URL is set but the allowlist is empty/missing', () => {
+  it('throws when LLM_API_URL is set but the host allowlist is empty/missing', () => {
     expect(() =>
       resolveCloudLlmConfig({
         LLM_API_URL: EU_URL,
         LLM_API_KEY: 'sk-1234567890',
-        LLM_DEPLOYMENT_CLASS: EU_CLASS
+        LLM_DEPLOYMENT_CLASS: EU_CLASS,
+        LLM_EU_DEPLOYMENT_CLASSES: EU_CLASS
       })
     ).toThrow(/allowlist/i)
   })
 
-  it('throws for a non-EU host even with a key and an EU-shaped deployment class', () => {
+  it('throws when LLM_API_URL is set but the deployment-class allowlist is empty/missing', () => {
+    expect(() =>
+      resolveCloudLlmConfig({
+        LLM_API_URL: EU_URL,
+        LLM_API_KEY: 'sk-1234567890',
+        LLM_DEPLOYMENT_CLASS: EU_CLASS,
+        LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com'
+      })
+    ).toThrow(/deployment/i)
+  })
+
+  it('throws for a non-EU host even with a key and an allowlisted deployment class', () => {
     expect(() =>
       resolveCloudLlmConfig({
         LLM_API_URL: 'https://llm-us.example.com/v1/analyze',
         LLM_API_KEY: 'sk-1234567890',
         LLM_DEPLOYMENT_CLASS: EU_CLASS,
-        LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com'
+        LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com',
+        LLM_EU_DEPLOYMENT_CLASSES: EU_CLASS
       })
     ).toThrow(/allowlist/i)
   })
@@ -121,7 +207,20 @@ describe('resolveCloudLlmConfig', () => {
         LLM_API_URL: EU_URL,
         LLM_API_KEY: 'sk-1234567890',
         LLM_DEPLOYMENT_CLASS: 'Global Standard',
-        LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com'
+        LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com',
+        LLM_EU_DEPLOYMENT_CLASSES: EU_CLASS
+      })
+    ).toThrow(/deployment/i)
+  })
+
+  it('throws for a novel deployment class that is not "global"-shaped but is simply not in the allowlist', () => {
+    expect(() =>
+      resolveCloudLlmConfig({
+        LLM_API_URL: EU_URL,
+        LLM_API_KEY: 'sk-1234567890',
+        LLM_DEPLOYMENT_CLASS: 'some-brand-new-vendor-region-nobody-configured',
+        LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com',
+        LLM_EU_DEPLOYMENT_CLASSES: EU_CLASS
       })
     ).toThrow(/deployment/i)
   })
@@ -131,13 +230,15 @@ describe('resolveCloudLlmConfig', () => {
       LLM_API_URL: EU_URL,
       LLM_API_KEY: 'sk-1234567890',
       LLM_DEPLOYMENT_CLASS: EU_CLASS,
-      LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com, other-eu.example.com'
+      LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com, other-eu.example.com',
+      LLM_EU_DEPLOYMENT_CLASSES: 'eu-data-zone, eu-central-1'
     })
     expect(config).toEqual({
       apiUrl: EU_URL,
       apiKey: 'sk-1234567890',
       deploymentClass: EU_CLASS,
-      euHostAllowlist: ['llm-eu.example.com', 'other-eu.example.com']
+      euHostAllowlist: ['llm-eu.example.com', 'other-eu.example.com'],
+      euDeploymentClassAllowlist: ['eu-data-zone', 'eu-central-1']
     })
   })
 })
@@ -219,7 +320,8 @@ describe('CloudLlmClient (real HTTP implementation, network-free — fetch is st
       apiUrl: EU_URL,
       apiKey: 'sk-1234567890',
       deploymentClass: EU_CLASS,
-      euHostAllowlist: EU_ALLOWLIST
+      euHostAllowlist: EU_ALLOWLIST,
+      euDeploymentClassAllowlist: EU_CLASS_ALLOWLIST
     })
   }
 
@@ -230,9 +332,23 @@ describe('CloudLlmClient (real HTTP implementation, network-free — fetch is st
           apiUrl: 'http://llm-eu.example.com/v1/analyze',
           apiKey: 'sk-1234567890',
           deploymentClass: EU_CLASS,
-          euHostAllowlist: EU_ALLOWLIST
+          euHostAllowlist: EU_ALLOWLIST,
+          euDeploymentClassAllowlist: EU_CLASS_ALLOWLIST
         })
     ).toThrow(/https/i)
+  })
+
+  it('refuses to construct with a non-allowlisted deployment class (defense-in-depth, closed allowlist)', () => {
+    expect(
+      () =>
+        new CloudLlmClient({
+          apiUrl: EU_URL,
+          apiKey: 'sk-1234567890',
+          deploymentClass: 'some-brand-new-vendor-region-nobody-configured',
+          euHostAllowlist: EU_ALLOWLIST,
+          euDeploymentClassAllowlist: EU_CLASS_ALLOWLIST
+        })
+    ).toThrow(/deployment/i)
   })
 
   it('an in-flight generation aborts on cancel(): isCancelled() true, done resolves without throwing', async () => {
@@ -284,29 +400,55 @@ describe('CloudLlmClient (real HTTP implementation, network-free — fetch is st
 
   it('an HTTP error response never leaks its body text in the thrown error path', async () => {
     const sensitivePayload = 'SECRET-CUSTOMER-BRIEF-CONTENT-should-never-appear-in-any-log-or-error'
-    const onTokenCalls: string[] = []
+    let jsonCalled = false
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
         Promise.resolve({
           ok: false,
           status: 502,
-          json: () => Promise.reject(new Error('should not be called for a non-ok response')),
+          json: () => {
+            jsonCalled = true
+            return Promise.reject(new Error('should not be called for a non-ok response'))
+          },
           text: () => Promise.resolve(sensitivePayload)
         } as unknown as Response)
       )
     )
     const client = makeClient()
-    const errors: string[] = []
-    // generate()'s `done` never rejects (Generation contract) — the run()
-    // internals still throw, but the public surface only exposes it via a
-    // swallow; assert indirectly that onToken was never called with the
-    // payload and that no observable error text contains it.
-    const gen = client.generate('sys', 'user', (tok) => onTokenCalls.push(tok))
-    await gen.done
-    for (const call of onTokenCalls) expect(call).not.toContain(sensitivePayload)
-    for (const err of errors) expect(err).not.toContain(sensitivePayload)
-    expect(onTokenCalls).toHaveLength(0)
+
+    // Reach into the private run() directly (documented internal, mirrors the
+    // reviewer's requested approach) so the assertion is on the ACTUAL thrown
+    // message, not just an indirect symptom — a regression that interpolates
+    // the body into the error text must fail this test.
+    const run = (client as any).run.bind(client) as (
+      systemPrompt: string,
+      userPrompt: string,
+      onToken: (tok: string) => void,
+      signal: AbortSignal,
+      isCancelled: () => boolean,
+      opts: AnalysisStreamOptions
+    ) => Promise<void>
+
+    let thrownMessage = ''
+    try {
+      await run(
+        'sys',
+        'user',
+        () => {},
+        new AbortController().signal,
+        () => false,
+        {}
+      )
+      throw new Error('expected run() to throw for a non-ok response')
+    } catch (err) {
+      thrownMessage = (err as Error).message
+    }
+    expect(thrownMessage).toMatch(/502/)
+    expect(thrownMessage).not.toContain(sensitivePayload)
+    // The body must never even be read on the error path — not just absent
+    // from the message.
+    expect(jsonCalled).toBe(false)
   })
 
   it('a malformed (non-JSON-parseable) response body never leaks its raw text', async () => {
@@ -323,6 +465,32 @@ describe('CloudLlmClient (real HTTP implementation, network-free — fetch is st
       )
     )
     const client = makeClient()
+    const run = (client as any).run.bind(client) as (
+      systemPrompt: string,
+      userPrompt: string,
+      onToken: (tok: string) => void,
+      signal: AbortSignal,
+      isCancelled: () => boolean,
+      opts: AnalysisStreamOptions
+    ) => Promise<void>
+
+    let thrownMessage = ''
+    try {
+      await run(
+        'sys',
+        'user',
+        () => {},
+        new AbortController().signal,
+        () => false,
+        {}
+      )
+      throw new Error('expected run() to throw for a malformed body')
+    } catch (err) {
+      thrownMessage = (err as Error).message
+    }
+    expect(thrownMessage).not.toContain(sensitivePayload)
+
+    // Also cover the public surface: generate()'s onToken must never fire.
     const onTokenCalls: string[] = []
     const gen = client.generate('sys', 'user', (tok) => onTokenCalls.push(tok))
     await gen.done

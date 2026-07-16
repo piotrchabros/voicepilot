@@ -59,12 +59,13 @@ describe('validateEnv', () => {
     expect(validateEnv(raw)).toEqual({})
   })
 
-  it('accepts a valid LLM_API_URL (https://) and LLM_API_KEY', () => {
+  it('accepts a valid LLM_API_URL (https://) and LLM_API_KEY plus both allowlists', () => {
     const raw = {
       LLM_API_URL: 'https://llm-eu.example.com/v1/analyze',
       LLM_API_KEY: 'sk-1234567890',
       LLM_DEPLOYMENT_CLASS: 'eu-central-1',
-      LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com'
+      LLM_EU_HOST_ALLOWLIST: 'llm-eu.example.com',
+      LLM_EU_DEPLOYMENT_CLASSES: 'eu-central-1,eu-west-1'
     }
     expect(validateEnv(raw)).toEqual(raw)
   })

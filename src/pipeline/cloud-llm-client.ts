@@ -22,59 +22,82 @@ export interface CloudLlmConfig {
   apiKey: string
   deploymentClass: string
   euHostAllowlist: string[]
+  euDeploymentClassAllowlist: string[]
 }
 
 /**
  * The subset of `src/main/env.ts`'s validated `Env` this module reads.
  * Defined locally (not imported from env.ts) so this file has no dependency
- * on Electron's `app` module or any other env.ts internals — only the four
- * plain string fields it actually needs, which keeps this testable with
- * plain object literals exactly like `validateEnv`'s own test suite does.
+ * on Electron's `app` module or any other env.ts internals — only the plain
+ * string fields it actually needs, which keeps this testable with plain
+ * object literals exactly like `validateEnv`'s own test suite does.
  */
 export interface CloudLlmEnv {
   LLM_API_URL?: string
   LLM_API_KEY?: string
   LLM_DEPLOYMENT_CLASS?: string
   LLM_EU_HOST_ALLOWLIST?: string
+  LLM_EU_DEPLOYMENT_CLASSES?: string
 }
 
-/**
- * Deployment-class values that look EU-adjacent but are actually
- * global/non-regional routing (spec.md §4 item 8: "Azure 'Global Standard' /
- * Vertex 'global' routes are disqualifying even on EU-looking hosts").
- * Pattern-based (not a fixed vendor enum) so this survives vendor selection
- * (docs/compliance.md item 1, still unknown) without another code change.
- */
-const DISQUALIFYING_DEPLOYMENT_CLASS_PATTERN = /\bglobal\b/i
-
-/** True when `deploymentClass` is non-blank and not an explicitly-global/non-regional route. */
-export function isEuDeploymentClass(deploymentClass: string): boolean {
-  const trimmed = deploymentClass.trim()
-  if (trimmed.length === 0) return false
-  return !DISQUALIFYING_DEPLOYMENT_CLASS_PATTERN.test(trimmed)
+/** Parses a comma-separated list into a normalized (trimmed, lowercased, de-blanked) array. */
+function parseCommaSeparatedList(raw: string | undefined): string[] {
+  if (raw === undefined) return []
+  return raw
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0)
 }
 
 /** Parses `LLM_EU_HOST_ALLOWLIST` (comma-separated hostnames) into a normalized list. */
 export function parseEuHostAllowlist(raw: string | undefined): string[] {
-  if (raw === undefined) return []
-  return raw
-    .split(',')
-    .map((host) => host.trim().toLowerCase())
-    .filter((host) => host.length > 0)
+  return parseCommaSeparatedList(raw)
+}
+
+/**
+ * Parses `LLM_EU_DEPLOYMENT_CLASSES` (comma-separated accepted deployment-class
+ * values, e.g. "eu-central-1,eu-west-1,eu data zone") into a normalized list.
+ */
+export function parseEuDeploymentClassAllowlist(raw: string | undefined): string[] {
+  return parseCommaSeparatedList(raw)
+}
+
+/**
+ * True only when `deploymentClass` exactly matches (case/whitespace-insensitive)
+ * an entry in `euDeploymentClassAllowlist`. This is a **closed allowlist of
+ * known-good values**, not a denylist of known-bad ones (spec.md §4 item 8):
+ * a novel, never-seen deployment-class string must be rejected by default,
+ * not accepted because it merely fails to match a "global"-shaped pattern.
+ * The allowlist is config-driven (not a fixed vendor enum) so this survives
+ * vendor selection (docs/compliance.md item 1, still unknown) without another
+ * code change — the same mechanism `parseEuHostAllowlist` already uses for
+ * hostnames.
+ */
+export function isEuDeploymentClass(
+  deploymentClass: string,
+  euDeploymentClassAllowlist: string[]
+): boolean {
+  const trimmed = deploymentClass.trim().toLowerCase()
+  if (trimmed.length === 0) return false
+  return euDeploymentClassAllowlist.includes(trimmed)
 }
 
 /**
  * Boot-time assertion (spec.md §4 item 8): refuses to start unless the
  * resolved cloud analysis LLM endpoint is https, its hostname is present in
- * the configured EU allowlist, and the deployment-class field is an
- * explicitly-EU value. Mirrors `assertEuEndpoint` in stt-soniox.ts, except
- * the allowlist is config-driven rather than a single hardcoded host,
- * because the vendor here is a recorded unknown.
+ * the configured EU host allowlist, and the deployment-class field exactly
+ * matches an entry in the configured EU deployment-class allowlist. Mirrors
+ * `assertEuEndpoint` in stt-soniox.ts, except both allowlists are
+ * config-driven rather than a single hardcoded host, because the vendor here
+ * is a recorded unknown. Both allowlists are **closed allowlists of
+ * known-good values** — an empty/missing allowlist, or a value not present
+ * in it, refuses to start; nothing is accepted by merely failing to look bad.
  */
 export function assertEuLlmEndpoint(
   apiUrl: string,
   deploymentClass: string,
-  euHostAllowlist: string[]
+  euHostAllowlist: string[],
+  euDeploymentClassAllowlist: string[]
 ): string {
   let parsed: URL
   try {
@@ -99,9 +122,14 @@ export function assertEuLlmEndpoint(
       `Refusing to start: cloud analysis LLM host "${parsed.hostname}" is not in the configured EU allowlist (spec.md §4 item 8, EU data residency).`
     )
   }
-  if (!isEuDeploymentClass(deploymentClass)) {
+  if (euDeploymentClassAllowlist.length === 0) {
     throw new Error(
-      `Refusing to start: cloud analysis LLM deployment class "${deploymentClass}" is not an explicitly-EU deployment — "global"/"Global Standard"-style routing is disqualifying even on an EU-allowlisted host (spec.md §4 item 8).`
+      'Refusing to start: LLM_EU_DEPLOYMENT_CLASSES is empty/missing while a cloud analysis LLM endpoint is configured — the deployment-class allowlist is fail-closed by design, same as the host allowlist (spec.md §4 item 8, docs/compliance.md "Cloud analysis LLM (Phase 6) gate").'
+    )
+  }
+  if (!isEuDeploymentClass(deploymentClass, euDeploymentClassAllowlist)) {
+    throw new Error(
+      `Refusing to start: cloud analysis LLM deployment class "${deploymentClass}" is not in the configured EU deployment-class allowlist — a novel or "global"/"Global Standard"-style value is disqualifying by default, even on an EU-allowlisted host (spec.md §4 item 8).`
     )
   }
   return apiUrl
@@ -126,8 +154,15 @@ export function resolveCloudLlmConfig(env: CloudLlmEnv): CloudLlmConfig | null {
   }
   const deploymentClass = env.LLM_DEPLOYMENT_CLASS ?? ''
   const euHostAllowlist = parseEuHostAllowlist(env.LLM_EU_HOST_ALLOWLIST)
-  assertEuLlmEndpoint(apiUrl, deploymentClass, euHostAllowlist)
-  return { apiUrl, apiKey: env.LLM_API_KEY, deploymentClass, euHostAllowlist }
+  const euDeploymentClassAllowlist = parseEuDeploymentClassAllowlist(env.LLM_EU_DEPLOYMENT_CLASSES)
+  assertEuLlmEndpoint(apiUrl, deploymentClass, euHostAllowlist, euDeploymentClassAllowlist)
+  return {
+    apiUrl,
+    apiKey: env.LLM_API_KEY,
+    deploymentClass,
+    euHostAllowlist,
+    euDeploymentClassAllowlist
+  }
 }
 
 /**
@@ -149,7 +184,12 @@ export class CloudLlmClient implements AnalysisLlm {
     // assertEuEndpoint call: even a caller that builds a CloudLlmConfig by
     // hand (bypassing resolveCloudLlmConfig) cannot construct a client
     // pointed at a non-EU/plain-http endpoint.
-    assertEuLlmEndpoint(config.apiUrl, config.deploymentClass, config.euHostAllowlist)
+    assertEuLlmEndpoint(
+      config.apiUrl,
+      config.deploymentClass,
+      config.euHostAllowlist,
+      config.euDeploymentClassAllowlist
+    )
     this.config = config
   }
 

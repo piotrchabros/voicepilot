@@ -63,7 +63,15 @@ const envSchema = z.object({
   /** Vendor-specific region/deployment identifier (e.g. "eu-central-1", "EU Data Zone"). */
   LLM_DEPLOYMENT_CLASS: z.string().trim().optional(),
   /** Comma-separated EU hostname allowlist, e.g. "llm-eu.example.com,other-eu.example.com". */
-  LLM_EU_HOST_ALLOWLIST: z.string().trim().optional()
+  LLM_EU_HOST_ALLOWLIST: z.string().trim().optional(),
+  /**
+   * Comma-separated closed allowlist of accepted deployment-class values
+   * (e.g. "eu-central-1,eu-west-1,EU Data Zone"). This is a **known-good
+   * allowlist, not a known-bad denylist** — a novel value not present here is
+   * rejected by default at boot (spec.md §4 item 8), same fail-closed
+   * mechanism as LLM_EU_HOST_ALLOWLIST.
+   */
+  LLM_EU_DEPLOYMENT_CLASSES: z.string().trim().optional()
 })
 
 export type Env = z.infer<typeof envSchema>
