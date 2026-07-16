@@ -65,10 +65,19 @@ export const SENTIMENT_OUTPUT_PATTERNS: readonly RegExp[] = [
   /zaniepokojon/i,
   // Polish — personality (inflection-tolerant prefix, same style as
   // knowledge.ts's EMOTION_INFERENCE_PATTERNS: "osobowość"/"osobowości"/
-  // "osobowościowy" all share the "osobowo[sś]" stem)
+  // "osobowościowy" all share the "osobowo[sś]" stem). `/\bcharakter/i`
+  // deliberately over-blocks legitimate phrases like "charakterystyka
+  // produktu" (product characteristics) — an accepted safe-direction
+  // tradeoff, not a bug: dropping a rare legitimate analysis line is cheap,
+  // letting a personality-inference response through the output guard is
+  // not (spec.md §1 non-goals). The bare `/temperament/i` PL entry that used
+  // to sit below this was removed as a duplicate of the EN `/\btemperament/i`
+  // above (6.4 re-review) — that entry already matches "temperament"
+  // case-insensitively regardless of language (PL spells the word
+  // identically), so the boundary-less PL copy only widened the match
+  // surface without adding real coverage.
   /osobowo[sś]/i,
-  /\bcharakter/i,
-  /temperament/i
+  /\bcharakter/i
 ]
 
 /** True when `text` matches any entry in {@link SENTIMENT_OUTPUT_PATTERNS}. */

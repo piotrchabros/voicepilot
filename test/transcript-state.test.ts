@@ -134,6 +134,18 @@ describe('TranscriptState.renderRollingWindow() (spec.md §3 stateless-cloud esc
     expect(after).toBe(before)
   })
 
+  it('maxTurns <= 0 (explicit override) yields an empty window, never throws (6.2 review boundary)', () => {
+    const s = fresh()
+    s.settle('THEM', 'a')
+    s.settle('ME', 'b')
+    s.settle('THEM', 'c')
+
+    expect(s.renderRollingWindow({ maxTurns: 0 }).text).toBe('')
+    expect(s.renderRollingWindow({ maxTurns: -1 }).text).toBe('')
+    // asOfTurn still reflects settled-turn count even when the window itself is empty.
+    expect(s.renderRollingWindow({ maxTurns: 0 }).asOfTurn).toBe(3)
+  })
+
   it('does not disturb subsequent settle()/live() calls or the settled prefix invariant', () => {
     const s = fresh()
     s.settle('THEM', 'dzien dobry')

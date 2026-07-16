@@ -132,7 +132,16 @@ export class KnowledgeBase {
     for (const file of files) {
       const text = readFileSync(file, 'utf8')
       const rel = relative(dir, file)
-      for (const { heading, content } of chunkMarkdown(text)) {
+      const sections = chunkMarkdown(text)
+      if (sections.length === 0) {
+        // File+path only — never the file's content (6.1 review finding: a
+        // preamble-only .md with no "## " headings silently contributes zero
+        // retrievable sections, which is easy to mistake for a load bug
+        // rather than an authoring mistake without a warning here).
+        console.warn(`knowledge base: file yielded zero "## " sections: ${rel}`)
+        continue
+      }
+      for (const { heading, content } of sections) {
         if (isDenylisted(content)) {
           // Log only file + heading — never the rejected content itself.
           console.warn(`knowledge base: section rejected by denylist lint: ${rel} § ${heading}`)

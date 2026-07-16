@@ -497,6 +497,47 @@ describe('CloudLlmClient (real HTTP implementation, network-free — fetch is st
     expect(onTokenCalls).toHaveLength(0)
   })
 
+  it('serializes maxOutputTokens as max_tokens in the outgoing fetch body (6.4 re-review)', async () => {
+    let capturedBody: string | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        capturedBody = init?.body as string | undefined
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ text: 'stage: discovery' })
+        } as unknown as Response)
+      })
+    )
+    const client = makeClient()
+    const gen = client.generate('sys', 'user', () => {}, { maxOutputTokens: 300 })
+    await gen.done
+    expect(capturedBody).toBeDefined()
+    const parsed = JSON.parse(capturedBody as string) as { max_tokens?: number }
+    expect(parsed.max_tokens).toBe(300)
+  })
+
+  it('omits max_tokens entirely (not sent as undefined) when maxOutputTokens is not supplied', async () => {
+    let capturedBody: string | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        capturedBody = init?.body as string | undefined
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ text: 'stage: discovery' })
+        } as unknown as Response)
+      })
+    )
+    const client = makeClient()
+    const gen = client.generate('sys', 'user', () => {})
+    await gen.done
+    const parsed = JSON.parse(capturedBody as string) as Record<string, unknown>
+    expect('max_tokens' in parsed).toBe(false)
+  })
+
   it('a successful response delivers the text via onToken and fires onFirstToken once', async () => {
     vi.stubGlobal(
       'fetch',

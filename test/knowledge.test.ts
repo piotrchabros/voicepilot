@@ -99,6 +99,52 @@ describe('KnowledgeBase.load chunking and per-section retrieval (PL fixtures)', 
   })
 })
 
+describe('KnowledgeBase.load preamble-only file (zero "## " sections)', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'knowledge-preamble-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('warns with file+path only (no content) when a file yields zero sections', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const preambleOnly =
+      '# Just a title\n\nSome intro prose with SECRET-CONTENT-marker, no "## " headings at all.\n'
+    writeFileSync(join(dir, 'preamble-only.md'), preambleOnly)
+
+    const kb = KnowledgeBase.load(dir)
+    expect(kb.size).toBe(0)
+
+    const warned = warnSpy.mock.calls.some(
+      (call) => String(call[0]).includes('preamble-only.md') && String(call[0]).includes('zero')
+    )
+    expect(warned).toBe(true)
+    // Never leak the file's actual content into the warn message.
+    const leaked = warnSpy.mock.calls.some((call) =>
+      String(call[0]).includes('SECRET-CONTENT-marker')
+    )
+    expect(leaked).toBe(false)
+
+    warnSpy.mockRestore()
+  })
+
+  it('does not warn for a file that has at least one "## " section', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(join(dir, 'has-section.md'), '# Title\n\n## Heading\n\nContent.\n')
+
+    KnowledgeBase.load(dir)
+
+    const warned = warnSpy.mock.calls.some((call) => String(call[0]).includes('has-section.md'))
+    expect(warned).toBe(false)
+
+    warnSpy.mockRestore()
+  })
+})
+
 describe('KnowledgeBase.load missing-directory safety', () => {
   it('warns and returns an empty, safe knowledge base when knowledge/ is missing', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -136,6 +182,23 @@ describe('loadCustomerBrief — whole-file, always-injected, never retrieval', (
     expect(loadCustomerBrief(dir, 'does-not-exist')).toBeNull()
     expect(warnSpy).toHaveBeenCalled()
     warnSpy.mockRestore()
+  })
+
+  it('rejects a crafted "../" name and never escapes customersDir (path-traversal regression, 6.1 review)', () => {
+    // A sibling file that a naive `join(customersDir, `${name}.md`)` (without
+    // `basename()`) could otherwise read via '../<secret>'.
+    const secretPath = join(dir, '..', 'secret-outside-customers.md')
+    writeFileSync(secretPath, '# Should never be readable via customersDir\n')
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const brief = loadCustomerBrief(dir, '../secret-outside-customers')
+      expect(brief).toBeNull()
+      expect(warnSpy).toHaveBeenCalled()
+    } finally {
+      rmSync(secretPath, { force: true })
+      warnSpy.mockRestore()
+    }
   })
 
   it('returns null and warns when the customers/ directory itself is missing', () => {
