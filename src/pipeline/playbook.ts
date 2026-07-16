@@ -221,7 +221,10 @@ function toEntry(input: PlaybookEntryInput): Entry {
   }
 }
 
-function trigrams(s: string): Map<string, number> {
+// Shared char-trigram cosine primitives — re-exported so other per-section
+// retrieval consumers (e.g. src/pipeline/knowledge.ts, spec.md §7) reuse the
+// exact same Polish-inflection-robust matching instead of re-implementing it.
+export function trigrams(s: string): Map<string, number> {
   const n =
     ' ' +
     s
@@ -237,13 +240,18 @@ function trigrams(s: string): Map<string, number> {
   return m
 }
 
-function norm(m: Map<string, number>): number {
+export function norm(m: Map<string, number>): number {
   let s = 0
   for (const v of m.values()) s += v * v
   return Math.sqrt(s)
 }
 
-function cosine(a: Map<string, number>, an: number, b: Map<string, number>, bn: number): number {
+export function cosine(
+  a: Map<string, number>,
+  an: number,
+  b: Map<string, number>,
+  bn: number
+): number {
   if (an === 0 || bn === 0) return 0
   // iterate the smaller side
   const small = a.size <= b.size ? a : b
