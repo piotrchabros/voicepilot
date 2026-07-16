@@ -196,6 +196,35 @@ export interface ConsentRequiredMsg {
 
 // ---- renderer API (exposed via preload contextBridge) ------------------------
 
+/** main -> panel: sent once, right after `panel:ready`, mirroring
+ *  `ConsentRequiredMsg`'s "state at send time" pattern above. Carries
+ *  whether `LLM_ANALYSIS_ENABLED` resolved true at boot (spec.md §7 "cloud-
+ *  processing indicator, analogous to REC", Plans.md Task 6.6). Not whether
+ *  the cloud LLM config itself resolved (that's the pipeline
+ *  utilityProcess's business, Task 6.4/6.3) — this is deliberately the same
+ *  simple env-flag read `resolveAnalysisEnabledFlag` already does. */
+export interface PanelInitMsg {
+  readonly type: 'panel-init'
+  readonly analysisEnabled: boolean
+}
+
+/** Analysis panel window's minimal preload surface (spec.md §5 "a second,
+ *  separately content-protected analysis panel window", Plans.md Task 6.6).
+ *  Deliberately narrower than `CopilotBridge` — the panel never sees
+ *  hint/health/consent traffic, only analysis results, the cloud-indicator
+ *  flag, and a manual "refresh now" request. */
+export interface PanelBridge {
+  /** Mirrors `CopilotBridge.onAnalysis` exactly — same channel, same shape. */
+  onAnalysis(cb: (analysis: Analysis) => void): () => void
+  onPanelInit(cb: (msg: PanelInitMsg) => void): () => void
+  /** Renderer -> main: operator clicked "refresh now" (spec.md §5). Main
+   *  re-sends the latest received analysis; there is no public re-trigger on
+   *  `AnalysisEngine` as of Task 6.6 (see docs/qa-checklist-6.6.md). */
+  refreshNow(): void
+  /** Renderer -> main: subscription is live, safe to send panel-init/analysis now. */
+  ready(): void
+}
+
 export interface CopilotBridge {
   onHint(cb: (hint: Hint) => void): () => void
   /** Renderer -> main: a health event (sidecar exit / device loss / Soniox

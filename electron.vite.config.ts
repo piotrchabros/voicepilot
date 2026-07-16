@@ -26,7 +26,13 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'out/preload',
-      rollupOptions: { input: { index: resolve('src/main/preload.ts') } },
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/preload.ts'),
+          // Analysis panel window's own, narrower preload (Plans.md Task 6.6).
+          panel: resolve('src/main/preload-panel.ts'),
+        },
+      },
     },
   },
   renderer: {
@@ -34,7 +40,14 @@ export default defineConfig({
     root: 'src/renderer',
     build: {
       outDir: 'out/renderer',
-      rollupOptions: { input: { index: resolve('src/renderer/index.html') } },
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          // Analysis panel window (Plans.md Task 6.6) — hidden by default,
+          // a separate BrowserWindow from the hint-card overlay above.
+          panel: resolve('src/renderer/panel.html'),
+        },
+      },
     },
   },
 })

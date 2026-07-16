@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'none'" />
+    <title>copilot analysis panel</title>
+    <link rel="stylesheet" href="./panel.css" />
+  </head>
+  <body>
+    <!--
+      Phase 6 analysis side panel (spec.md §5 "Phase 6 adds a second,
+      separately content-protected analysis panel window", Plans.md Task
+      6.6). Hidden by default, toggled by a global shortcut
+      (Command+Shift+A, src/main/index.ts) — never auto-shown. Unlike the
+      tiny hint card, this window IS interactive: real clicks land here
+      (no setIgnoreMouseEvents), so the refresh-now button works.
+
+      Fixed skeleton, stable section order (spec.md §7): cloud-processing
+      indicator, one-line call-stage indicator, up to 3 suggested questions,
+      optional next-steps, "as of turn N (retained)" stamp, refresh-now.
+      Non-directive context only — objection responses stay exclusively on
+      the hint card (spec.md §5); this panel never competes with it.
+    -->
+    <div id="panel">
+      <div id="panel-header">
+        <span id="panel-title">Analysis</span>
+        <div id="cloud-indicator"><span id="cloud-dot"></span><span id="cloud-label">CLOUD</span></div>
+      </div>
+      <div id="panel-body">
+        <div id="panel-empty"><span id="panel-empty-text"></span></div>
+        <div id="panel-content">
+          <div id="panel-stage"></div>
+          <ul id="panel-questions"></ul>
+          <div id="panel-next-steps-wrap">
+            <div id="panel-next-steps-label">Next steps</div>
+            <ul id="panel-next-steps"></ul>
+          </div>
+          <div id="panel-stamp"></div>
+        </div>
+      </div>
+      <div id="panel-footer">
+        <button id="panel-refresh-btn" type="button">Refresh now</button>
+      </div>
+    </div>
+    <script type="module" src="./panel.ts"></script>
+  </body>
+</html>

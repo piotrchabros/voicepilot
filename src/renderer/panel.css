@@ -1,0 +1,173 @@
+/* Analysis panel window (spec.md §5, Plans.md Task 6.6). Unlike overlay.css,
+   this window IS interactive — no `pointer-events: none` at the page level. */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(12, 12, 14, 0.92);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: rgb(255, 255, 255);
+  /* Stale grey-out (spec.md §7 "greyed when stale") — dims everything but
+     the header, so the cloud indicator + title stay legible while the
+     operator notices the content is out of date. */
+  transition: opacity 150ms ease-out;
+}
+
+#panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+#panel-title {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Cloud-processing indicator — analogous to overlay.css's #rec-indicator
+   (spec.md §7 "visible marker when LLM_ANALYSIS_ENABLED resolved true"). */
+#cloud-indicator {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.22);
+}
+
+#cloud-indicator.visible {
+  display: flex;
+}
+
+#cloud-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(59, 130, 246);
+}
+
+#cloud-label {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: rgb(147, 197, 253);
+}
+
+#panel-body {
+  flex: 1;
+  min-height: 0;
+  transition: opacity 150ms ease-out;
+}
+
+/* Stale grey-out (spec.md §7 "greyed when stale") — dims everything but the
+   header, so the cloud indicator + title stay legible while the operator
+   notices the content is out of date. */
+#panel.stale #panel-body {
+  opacity: 0.45;
+}
+
+#panel-empty {
+  display: none;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+}
+
+#panel-empty.visible {
+  display: flex;
+}
+
+#panel-content {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#panel-content.visible {
+  display: flex;
+}
+
+#panel-stage {
+  font-weight: 600;
+  font-size: 14px;
+  color: rgb(255, 255, 255);
+}
+
+#panel-questions,
+#panel-next-steps {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+#panel-next-steps-wrap {
+  display: none;
+}
+
+#panel-next-steps-wrap.visible {
+  display: block;
+}
+
+#panel-next-steps-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 4px;
+}
+
+#panel-stamp {
+  margin-top: auto;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+#panel-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+#panel-refresh-btn {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgb(255, 255, 255);
+  cursor: pointer;
+}
+
+#panel-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
