@@ -104,3 +104,6 @@ native/**/.build/
 # harness worktrees (never commit)
 .wt/
 .harness-worktrees/
+
+# customer briefs are personal data — never commit
+customers/

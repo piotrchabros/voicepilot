@@ -58,6 +58,39 @@ employee).
 | Mixed-channel handling in Transport B (§6.3) | **unknown** | Threshold vs diarization decision pending. |
 | Retention policy if `PERSIST_TRANSCRIPTS=true` ever ships | **unknown** | No retention policy has been written; if this flag is ever turned on, item 2 above (Soniox retention/ZDR) and a written retention policy must both be in place first. |
 
+## Cloud analysis LLM (Phase 6) gate
+
+**GATE: no real-prospect cloud analysis until every row below is `done`; the
+cloud-send feature flag stays OFF until then.** This mirrors the real-prospect
+call gate above — the cloud analysis LLM is a second processor sitting on top
+of the transcript/customer-brief data, and it needs its own DPA/retention/
+consent chain before any real-prospect data may be sent to it. This extends
+the `spec.md` §4 "Compliance & security (EU) — blocking requirements" list
+(items 1–7) with the Phase-6 cloud analysis LLM requirement; `spec.md` should
+be updated with a corresponding item 8 when this feature is scoped there.
+
+| # | Item | Status | Evidence / how to verify |
+|---|------|--------|---------------------------|
+| 1 | LLM vendor selection + DPA countersigned | **unknown** | No vendor DPA has been countersigned for cloud analysis use. **2026-07 research summary** (verification guidance, not a decision): Anthropic's direct API has no EU inference geo — EU residency currently requires going through a cloud reseller (AWS Bedrock `eu-central-1`/`eu-west-1`/`eu-west-3`/`eu-north-1`, or Google Vertex EU regions). OpenAI EU data residency is sales-gated, configured per-project, and only applies to newly created projects (existing projects cannot be migrated in place). Azure OpenAI requires an explicit EU Data Zone / regional deployment — the default "Global Standard" deployment tier is disqualifying for EU-only routing. Mistral is EU-hosted by default, but its Zero Data Retention (ZDR) terms are gated to the Scale plan. **Verify**: pick a vendor+deployment path from the above, confirm the specific region/deployment in that vendor's console, and countersign the DPA before recording `done`. |
+| 2 | Retention / ZDR real terms | **unknown** | Do not assume "stateless on our side" implies zero retention on the vendor's side — **stateless on our side ≠ zero retention on theirs**. Vendors commonly run abuse-monitoring/safety windows (~30 days is a typical order of magnitude) even when the product-facing API is marketed as not persisting conversation state for training. **Verify**: read the specific vendor's data retention / abuse-monitoring policy (not just the ZDR marketing page) and record the actual retention window and its legal basis here. |
+| 3 | Region-pinning evidence | **unknown** | Region selection must be confirmed **per project/account**, not assumed from a vendor's general EU availability. In particular, OpenAI project misconfiguration silently falls back to US routing — a project not explicitly configured for EU residency will process data in the US without any error. **Verify**: capture per-project console evidence (screenshot or API response showing the configured region) for the specific account/project actually used in production, not just "the vendor supports EU." |
+| 4 | Subprocessor list review | **unknown** | The selected vendor's subprocessor list has not been reviewed. **Verify**: locate the vendor's published subprocessor list (typically in their trust/compliance center), confirm none of the subprocessors introduce an undocumented EU-residency or DPA gap, and record the review date + list version here. |
+| 5 | Consent scope covers second processor + customer-brief data | **blocked(human)** | The existing per-call operator affirmation (Task 4.1, spec.md §4 item 2) was scoped to Soniox transcription only. Sending transcript and/or customer-brief content to a second processor (the cloud analysis LLM) is a materially different data flow and is **not** covered by that existing consent gate. Extending consent scope (or building a new gate) requires a human/legal decision — no agent may assume the existing affirmation covers this. |
+| 6 | Customer-brief lawful basis (Art 6(1)(f)) | **blocked(human)** | Processing customer-brief data (see the customer-brief template below) needs a documented lawful basis. A one-paragraph legitimate-interest note under GDPR Art 6(1)(f) is the anticipated route, but that note must be human-authored and human-signed — no agent may draft or assume legal wording here, consistent with the `CONSENT_ANNOUNCEMENT_PL` policy above. |
+
+### Recorded-as-fact: KB curation rule
+
+| # | Item | Status | Evidence / how to verify |
+|---|------|--------|---------------------------|
+| 7 | KB curation rule: no emotional-state detection/exploitation content | **done** | Recorded as policy, consistent with spec.md §1 non-goals (no emotion/sentiment/stress/personality inference) and the Art 5(1)(f) workplace-monitoring tripwire under the EU AI Act. Psychology-adjacent notes in the knowledge base may describe **techniques and language** (what to say, how to phrase something) but must never contain instructions to **detect or exploit** a prospect's or rep's emotional state. No mood, rapport, or engagement **scores**, and no personality profiling of either the prospect or the rep, are permitted in KB content. This rule is enforced mechanically by a denylist lint applied at KB load time (Task 6.1). |
+
+**Gate statement**: no real-prospect data (transcript or customer-brief
+content) may be sent to the cloud analysis LLM until items 1–6 above are all
+`done`; the cloud-send feature flag stays **OFF** until then. This mirrors the
+"Real-prospect call gate" convention above — internal/test analysis with
+synthetic or consenting-and-aware data is not blocked by this gate, but real
+prospect or customer-brief data is.
+
 ## Maintenance
 
 Update this file (not code comments, not Plans.md) whenever any of the
